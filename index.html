@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sugar Rush — a match-3 game</title>
+<style>
+  :root{
+    --bg:#f4f4f2;
+    --panel:#ffffff;
+    --ink:#16161a;
+    --muted:#6f6f76;
+    --line:#e4e4e0;
+    --accent:#2b6cff;
+    --good:#1f9d63;
+    --warn:#d1791f;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
+    color:var(--ink);
+    padding:24px;
+  }
+  .game{
+    background:var(--panel);
+    border-radius:16px;
+    padding:28px 28px 32px;
+    border:1px solid var(--line);
+    width:min(94vw,480px);
+    text-align:left;
+    position:relative;
+  }
+  h1{
+    font-size:20px;
+    font-weight:600;
+    margin:0 0 2px;
+    letter-spacing:-.01em;
+  }
+  .sub{font-size:13px;color:var(--muted);margin-bottom:20px;}
+  .hud{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    padding:14px 2px;
+    margin-bottom:18px;
+    font-size:12px;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:.06em;
+  }
+  .hud div span{display:block;font-size:20px;color:var(--ink);font-weight:600;letter-spacing:0;text-transform:none;margin-top:2px;}
+  .hud .target span{color:var(--good);}
+  .hud .moves span{color:var(--warn);}
+  #board{
+    display:grid;
+    grid-template-columns:repeat(8,1fr);
+    gap:4px;
+    background:var(--bg);
+    border-radius:10px;
+    padding:6px;
+    aspect-ratio:1/1;
+    position:relative;
+  }
+  .cell{
+    position:relative;
+    border-radius:6px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    transition:transform .1s ease, box-shadow .1s ease;
+    background:var(--panel);
+  }
+  .cell:hover{transform:scale(1.04);}
+  .cell.selected{box-shadow:inset 0 0 0 2px var(--ink);}
+  .cell.clearing{animation:pop .2s ease forwards;}
+  @keyframes pop{
+    0%{transform:scale(1);opacity:1;}
+    100%{transform:scale(0.3);opacity:0;}
+  }
+  .shape{width:62%;height:62%;}
+  .msg{
+    margin-top:16px;
+    font-size:13px;
+    color:var(--muted);
+    min-height:18px;
+  }
+  .overlay{
+    position:absolute;inset:0;
+    background:rgba(255,255,255,.97);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    color:var(--ink);
+    border-radius:16px;
+    z-index:10;
+    text-align:center;
+    padding:24px;
+  }
+  .overlay.show{display:flex;}
+  .overlay h2{font-size:22px;font-weight:600;margin:0 0 6px;}
+  .overlay p{margin:0 0 20px;font-size:14px;color:var(--muted);}
+  button.restart{
+    background:var(--ink);
+    color:#fff;
+    border:none;
+    padding:10px 22px;
+    border-radius:8px;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  button.restart:hover{background:#000;}
+</style>
+</head>
+<body>
+<div class="game">
+  <h1>Sugar Rush</h1>
+  <div class="sub">Swap neighboring candies to match 3 or more</div>
+  <div class="hud">
+    <div class="score">Score<span id="score">0</span></div>
+    <div class="target">Target<span id="target">1500</span></div>
+    <div class="moves">Moves<span id="moves">25</span></div>
+  </div>
+  <div id="board"></div>
+  <div class="msg" id="msg"></div>
+  <div class="overlay" id="overlay">
+    <h2 id="overlayTitle">You win!</h2>
+    <p id="overlayText">Sweet victory.</p>
+    <button class="restart" onclick="startGame()">Play again</button>
+  </div>
+</div>
+
+<script>
+const SIZE = 8;
+const TYPES = [
+  {name:'circle', color:'#2b6cff'},
+  {name:'square', color:'#ff5c5c'},
+  {name:'diamond', color:'#ffb400'},
+  {name:'triangle', color:'#1f9d63'},
+  {name:'star', color:'#7c5cff'},
+  {name:'hex', color:'#17b8b8'},
+];
+const TARGET_SCORE = 1500;
+const MAX_MOVES = 25;
+
+let board = [];
+let score = 0;
+let movesLeft = MAX_MOVES;
+let selected = null;
+let busy = false;
+
+const boardEl = document.getElementById('board');
+const scoreEl = document.getElementById('score');
+const movesEl = document.getElementById('moves');
+const targetEl = document.getElementById('target');
+const msgEl = document.getElementById('msg');
+const overlayEl = document.getElementById('overlay');
+
+targetEl.textContent = TARGET_SCORE;
+
+function randType(){ return Math.floor(Math.random()*TYPES.length); }
+
+function makeShapeSVG(typeIdx){
+  const t = TYPES[typeIdx];
+  const c = t.color;
+  switch(t.name){
+    case 'circle':
+      return `<svg class="shape" viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="${c}"/></svg>`;
+    case 'square':
+      return `<svg class="shape" viewBox="0 0 100 100"><rect x="12" y="12" width="76" height="76" rx="14" fill="${c}"/></svg>`;
+    case 'diamond':
+      return `<svg class="shape" viewBox="0 0 100 100"><polygon points="50,6 94,50 50,94 6,50" fill="${c}"/></svg>`;
+    case 'triangle':
+      return `<svg class="shape" viewBox="0 0 100 100"><polygon points="50,10 92,88 8,88" fill="${c}"/></svg>`;
+    case 'star':
+      return `<svg class="shape" viewBox="0 0 100 100"><polygon points="50,4 61,37 96,37 68,58 79,92 50,71 21,92 32,58 4,37 39,37" fill="${c}"/></svg>`;
+    case 'hex':
+      return `<svg class="shape" viewBox="0 0 100 100"><polygon points="50,4 92,27 92,73 50,96 8,73 8,27" fill="${c}"/></svg>`;
+  }
+}
+
+function idx(r,c){ return r*SIZE+c; }
+
+function fillInitialBoard(){
+  board = new Array(SIZE*SIZE).fill(0).map(()=>randType());
+  // remove any accidental starting matches
+  let matches = findMatches();
+  let guard = 0;
+  while(matches.size > 0 && guard < 50){
+    matches.forEach(i => board[i] = randType());
+    matches = findMatches();
+    guard++;
+  }
+}
+
+function renderBoard(){
+  boardEl.innerHTML = '';
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      const i = idx(r,c);
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.index = i;
+      if(board[i] !== null){
+        cell.innerHTML = makeShapeSVG(board[i]);
+      }
+      cell.addEventListener('click', onCellClick);
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function onCellClick(e){
+  if(busy || movesLeft<=0) return;
+  const i = parseInt(e.currentTarget.dataset.index);
+  if(selected === null){
+    selected = i;
+    updateSelectionUI();
+    return;
+  }
+  if(selected === i){
+    selected = null;
+    updateSelectionUI();
+    return;
+  }
+  if(areAdjacent(selected, i)){
+    trySwap(selected, i);
+    selected = null;
+    updateSelectionUI();
+  } else {
+    selected = i;
+    updateSelectionUI();
+  }
+}
+
+function updateSelectionUI(){
+  document.querySelectorAll('.cell').forEach(el=>{
+    el.classList.toggle('selected', parseInt(el.dataset.index) === selected);
+  });
+}
+
+function areAdjacent(a,b){
+  const ra=Math.floor(a/SIZE), ca=a%SIZE;
+  const rb=Math.floor(b/SIZE), cb=b%SIZE;
+  return (Math.abs(ra-rb)===1 && ca===cb) || (Math.abs(ca-cb)===1 && ra===rb);
+}
+
+function swap(a,b){
+  const tmp = board[a];
+  board[a] = board[b];
+  board[b] = tmp;
+}
+
+async function trySwap(a,b){
+  busy = true;
+  swap(a,b);
+  renderBoard();
+  await wait(120);
+  const matches = findMatches();
+  if(matches.size === 0){
+    swap(a,b);
+    renderBoard();
+    msgEl.textContent = "No match — try again";
+    busy = false;
+    return;
+  }
+  msgEl.textContent = "";
+  movesLeft--;
+  updateHUD();
+  await resolveMatches();
+  busy = false;
+  checkEndState();
+}
+
+function findMatches(){
+  const matched = new Set();
+  // rows
+  for(let r=0;r<SIZE;r++){
+    let runStart=0;
+    for(let c=1;c<=SIZE;c++){
+      const cur = c<SIZE ? board[idx(r,c)] : null;
+      const prev = board[idx(r,c-1)];
+      if(cur === prev && cur !== null){
+        continue;
+      } else {
+        const runLen = c - runStart;
+        if(runLen >= 3){
+          for(let k=runStart;k<c;k++) matched.add(idx(r,k));
+        }
+        runStart = c;
+      }
+    }
+  }
+  // cols
+  for(let c=0;c<SIZE;c++){
+    let runStart=0;
+    for(let r=1;r<=SIZE;r++){
+      const cur = r<SIZE ? board[idx(r,c)] : null;
+      const prev = board[idx(r-1,c)];
+      if(cur === prev && cur !== null){
+        continue;
+      } else {
+        const runLen = r - runStart;
+        if(runLen >= 3){
+          for(let k=runStart;k<r;k++) matched.add(idx(k,c));
+        }
+        runStart = r;
+      }
+    }
+  }
+  return matched;
+}
+
+async function resolveMatches(){
+  let cascade = 0;
+  while(true){
+    const matches = findMatches();
+    if(matches.size === 0) break;
+    cascade++;
+    const points = matches.size * 10 * cascade;
+    score += points;
+    updateHUD();
+    markClearing(matches);
+    await wait(260);
+    matches.forEach(i => board[i] = null);
+    dropAndFill();
+    renderBoard();
+    await wait(180);
+  }
+  if(cascade > 1){
+    msgEl.textContent = `Cascade x${cascade}!`;
+  }
+}
+
+function markClearing(matches){
+  matches.forEach(i=>{
+    const el = boardEl.querySelector(`[data-index="${i}"]`);
+    if(el) el.classList.add('clearing');
+  });
+}
+
+function dropAndFill(){
+  for(let c=0;c<SIZE;c++){
+    let writeRow = SIZE-1;
+    for(let r=SIZE-1;r>=0;r--){
+      const i = idx(r,c);
+      if(board[i] !== null){
+        const wi = idx(writeRow,c);
+        board[wi] = board[i];
+        if(wi !== i) board[i] = null;
+        writeRow--;
+      }
+    }
+    for(let r=writeRow;r>=0;r--){
+      board[idx(r,c)] = randType();
+    }
+  }
+}
+
+function updateHUD(){
+  scoreEl.textContent = score;
+  movesEl.textContent = Math.max(movesLeft,0);
+}
+
+function checkEndState(){
+  if(score >= TARGET_SCORE){
+    showOverlay(true);
+  } else if(movesLeft <= 0){
+    showOverlay(false);
+  }
+}
+
+function showOverlay(won){
+  overlayEl.classList.add('show');
+  document.getElementById('overlayTitle').textContent = won ? "Sweet victory!" : "Out of moves";
+  document.getElementById('overlayText').textContent = won
+    ? `You scored ${score} points — the candies bow to you.`
+    : `You scored ${score} out of ${TARGET_SCORE}. Give it another go?`;
+}
+
+function wait(ms){ return new Promise(res=>setTimeout(res,ms)); }
+
+function startGame(){
+  overlayEl.classList.remove('show');
+  score = 0;
+  movesLeft = MAX_MOVES;
+  selected = null;
+  busy = false;
+  msgEl.textContent = "";
+  updateHUD();
+  fillInitialBoard();
+  renderBoard();
+}
+
+startGame();
+</script>
+</body>
+</html>
