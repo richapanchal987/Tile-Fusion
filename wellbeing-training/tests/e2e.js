@@ -258,7 +258,10 @@ async function open(browser, email, opts) {
     assert.ok((await s.innerText('.center')).includes("not enrolled")); await s.context().close();
     const p = await open(browser, 'asha@fsksurat.in');
     await p.locator('.tab', { hasText: 'Guide' }).click();
-    assert.ok((await p.innerText('main')).includes('Critical gates'));
+    const guide = await p.innerText('main');
+    assert.ok(guide.includes('Critical gates') && guide.includes('What each part is worth'));
+    assert.ok(guide.includes('5. Counseling & Helping Conversations') && guide.includes('20%') && guide.includes('1. Role, Scope, Ethics & Professional Boundaries') && guide.includes('add up to 100%'), 'every topic and its weight is listed');
+    assert.strictEqual(await p.locator('.tw li').count(), 10);
     await p.context().close();
   });
 
