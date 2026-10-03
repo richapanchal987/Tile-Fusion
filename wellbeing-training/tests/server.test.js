@@ -136,6 +136,18 @@ t('staff safeguards: cannot remove yourself or the last admin; removing staff cl
   const b = W.call('removeStaff', ['tl@fsksurat.in']);
   assert.deepStrictEqual(b.trainees.find(x => x.id === 'asha@fsksurat.in').assessors, []);
 });
+t('a bad start date in the Sheet never crashes the app (it used to: RangeError Invalid time value)', () => {
+  W.as(ADMIN);
+  W.call('enrolTrainee', ['Dateless', 'dateless@fsksurat.in', [], 'Standard', '2026-10-05']);
+  const row = W.sheets.Trainees.cells.findIndex(r => r[0] === 'dateless@fsksurat.in') + 1;
+  const start = v => { W.sheets.Trainees.set(row, 4, v); return W.call('getBootstrap').trainees.find(x => x.id === 'dateless@fsksurat.in'); };
+  assert.strictEqual(start('5/10/2026').start, '2026-10-05');
+  assert.strictEqual(start('5/10/2026').cal.length, 10);
+  ['tomorrow', 'Mon Oct 05 2026', '31/02/2026', ''].forEach(v => { const tr = start(v); assert.strictEqual(tr.start, ''); assert.strictEqual(tr.cal.length, 0); assert.strictEqual(tr.stats.calendarState, 'unknown'); });
+  assert.strictEqual(W.call('getBootstrap').trainees.length >= 4, true, 'other trainees still load');
+  assert.throws(() => W.api.updateTrainee('dateless@fsksurat.in', { start: 'soon' }), /valid date/);
+  assert.strictEqual(W.call('updateTrainee', ['dateless@fsksurat.in', { start: '12/10/2026' }]).trainees.find(x => x.id === 'dateless@fsksurat.in').start, '2026-10-12');
+});
 t('trainee archive: archived trainee loses access', () => {
   W.as(ADMIN); W.call('updateTrainee', ['bina@fsksurat.in', { active: false }]);
   W.as('bina@fsksurat.in'); assert.strictEqual(W.call('getBootstrap').me.role, 'None');

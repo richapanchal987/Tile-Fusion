@@ -136,8 +136,10 @@ const yn_ = b => b ? 'Yes' : 'No';
 const num_ = (v, d) => { const n = Number(v); return isFinite(n) && String(v).trim() !== '' ? n : (d === undefined ? 0 : d); };
 const str_ = (v, max) => String(v == null ? '' : v).trim().slice(0, max || 2000);
 function fmtDate_(d) {
-  if (d instanceof Date) return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  return String(d || '').slice(0, 10);
+  if (Object.prototype.toString.call(d) === '[object Date]') {
+    return isNaN(d.getTime()) ? '' : Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return normaliseDate_(d);
 }
 const todayIso_ = () => Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
 const nowStamp_ = () => Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
@@ -373,8 +375,8 @@ function checkAssessors_(db, list) {
   return out;
 }
 function checkDate_(v) {
-  const s = String(v || '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || isNaN(isoToUtc_(s).getTime())) throw new Error('Enter the start date as a valid date.');
+  const s = normaliseDate_(v);
+  if (!s) throw new Error('Enter the start date as a valid date.');
   return s;
 }
 

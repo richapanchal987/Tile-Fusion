@@ -67,6 +67,7 @@ function render(){
 /* ---------- trainee view ---------- */
 function paceChip(tr){
   const s=tr.stats;
+  if(s.calendarState==='unknown')return`<span class="chip warn">No start date set</span>`;
   if(s.calendarState==='notstarted')return`<span class="chip">Starts ${fmtDate(tr.start)}</span>`;
   if(s.finished)return`<span class="chip good">All cycles worked through</span>`;
   const tip=`The calendar puts this trainee in cycle ${s.expected}; their work is in cycle ${s.current}.`;

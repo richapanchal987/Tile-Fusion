@@ -24,16 +24,41 @@ const norm_ = e => String(e || '').trim().toLowerCase();
 
 /* ---------------- Calendar: 6 working days a cycle, Sundays skipped ---------------- */
 
-function isoToUtc_(iso) {
-  const p = String(iso).slice(0, 10).split('-').map(Number);
-  return new Date(Date.UTC(p[0], p[1] - 1, p[2]));
-}
 const utcToIso_ = d => d.toISOString().slice(0, 10);
 const nextDay_ = d => new Date(d.getTime() + 86400000);
 
+/** Reads a yyyy-MM-dd string as a UTC date. Returns null if it is not a real date. */
+function isoToUtc_(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  if (!m) return null;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Turns whatever is in a date cell into yyyy-MM-dd, or '' if it cannot be understood.
+ * Accepts ISO text, day-first d/m/y (as used in India) and Sheets serial numbers.
+ */
+function normaliseDate_(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v).trim();
+  if (!s) return '';
+  if (/^\d{5}$/.test(s)) {                       // a Sheets date serial such as 46300
+    const n = Number(s);
+    return n > 20000 && n < 80000 ? utcToIso_(new Date(Math.round((n - 25569) * 86400000))) : '';
+  }
+  let y, mo, da, m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T ])/.exec(s);
+  if (m) { y = +m[1]; mo = +m[2]; da = +m[3]; }
+  else if ((m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/.exec(s))) { da = +m[1]; mo = +m[2]; y = +m[3]; }
+  else return '';
+  const dt = new Date(Date.UTC(y, mo - 1, da));
+  if (isNaN(dt.getTime()) || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== da) return '';
+  return utcToIso_(dt);
+}
+
 function buildCalendar_(startIso, cycles, perCycle) {
-  if (!startIso) return [];
   let d = isoToUtc_(startIso);
+  if (!d) return [];
   const out = [];
   for (let c = 1; c <= cycles; c++) {
     let first = null, last = null;

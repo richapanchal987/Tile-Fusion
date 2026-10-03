@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm'), assert = r
 const dir = path.join(__dirname, '..', 'apps-script');
 const src = ['Logic.gs', 'SeedData.gs'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
 const L = vm.runInNewContext(src + `;({ buildCalendar_, expectedCycle_, effectiveWeights_, computeStats_, buildBootstrap_, validateAssessment_,
-  validateReadiness_, statsForTrainee_, visibleTo_, extOk_, safeFileName_, SEED })`, {});
+  validateReadiness_, statsForTrainee_, normaliseDate_, visibleTo_, extOk_, safeFileName_, SEED })`, {});
 let n = 0;
 const J = x => JSON.parse(JSON.stringify(x));
 const deq = (a, b) => assert.deepStrictEqual(J(a), J(b));
@@ -50,6 +50,17 @@ t('expected cycle: before, during, Sunday gap, after', () => {
   assert.strictEqual(L.expectedCycle_(cal, '2027-06-01').state, 'past');
 });
 
+t('dates: any cell format is read safely, day-first for d/m/y, and never throws', () => {
+  const n = L.normaliseDate_;
+  assert.strictEqual(n('2026-10-05'), '2026-10-05');
+  assert.strictEqual(n('2026-10-05T00:00:00.000Z'), '2026-10-05');
+  assert.strictEqual(n('5/10/2026'), '2026-10-05');       // 5 October, not 10 May
+  assert.strictEqual(n('05-10-2026'), '2026-10-05');
+  assert.strictEqual(n('05.10.2026'), '2026-10-05');
+  assert.strictEqual(n('46300'), '2026-10-05');          // Sheets serial number
+  ['', null, undefined, 'tomorrow', 'Mon Oct 05 2026', '31/02/2026', '2026-13-40', '99999'].forEach(v => assert.strictEqual(n(v), '', String(v)));
+  assert.deepStrictEqual(J(L.buildCalendar_('not a date', 10, 6)), []);
+});
 t('weights: effective weights add up to 100 and follow the topic weights', () => {
   const eff = L.effectiveWeights_(S.topics, S.tasks);
   const sum = Object.values(eff).reduce((a, b) => a + b, 0);
