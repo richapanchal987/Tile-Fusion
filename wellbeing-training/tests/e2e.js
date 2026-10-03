@@ -32,6 +32,9 @@ async function open(browser, email, opts) {
     const mk = (s, f) => new Proxy({}, { get: (_, fn) => (...a) => window.__srv(fn, a).then(r => r.error ? f(new Error(r.error)) : s(r.ok)) });
     window.google.script.run = { withSuccessHandler: s => ({ withFailureHandler: f => mk(s, f) }) };
   });
+  const LIBS = process.env.LIBS_DIR || '/tmp/claude-0/libs/node_modules';
+  const local = { 'pdf.min.js': 'pdfjs-dist/build/pdf.min.js', 'pdf.worker.min.js': 'pdfjs-dist/build/pdf.worker.min.js', 'mammoth.browser.min.js': 'mammoth/mammoth.browser.min.js' };
+  await page.route('https://cdnjs.cloudflare.com/**', r => { const f = local[r.request().url().split('/').pop()]; return f && fs.existsSync(path.join(LIBS, f)) ? r.fulfill({ contentType: 'text/javascript', headers: { 'access-control-allow-origin': '*' }, body: fs.readFileSync(path.join(LIBS, f)) }) : r.abort(); });
   await page.route('http://app.test/', r => r.fulfill({ contentType: 'text/html', body: HTML })); await page.goto('http://app.test/'); await page.waitForSelector('.top, .center h1');
   return page;
 }
@@ -117,6 +120,63 @@ async function open(browser, email, opts) {
     assert.ok((await p.locator('.task', { hasText: 'Role Play - Reluctant Student' }).innerText()).includes('Complete'));
     assert.strictEqual(await p.locator('[data-act=ready]').count(), 0, 'no clearance buttons while gates are open');
     await p.screenshot({ path: path.join(shots, '4-assessor-trainee-view.png'), fullPage: true });
+    assert.deepStrictEqual(p.errors, []); await p.context().close();
+  });
+
+  await step('review tab: names the trainee on every card and filters by trainee', async () => {
+    const t = await open(browser, 'bina@fsksurat.in');    // a second trainee with a submission
+    await t.locator('.task', { hasText: 'Well-being Pyramid' }).locator('summary').click();
+    await t.locator('.task', { hasText: 'Well-being Pyramid' }).locator('[data-f=evidence]').fill('Notes in the shared handbook');
+    await t.locator('.task', { hasText: 'Well-being Pyramid' }).locator('[data-act=submit]').click();
+    await t.waitForSelector('.toast:has-text("Submitted for review")'); await t.context().close();
+    const p = await open(browser, ADMIN);
+    const cards = p.locator('.rv'), n = await cards.count();
+    assert.ok(n >= 2, 'at least two cards');
+    for (let i = 0; i < n; i++) assert.ok((await cards.nth(i).locator('.who').innerText()).trim().length > 2, 'trainee name on card ' + i);
+    assert.ok((await cards.nth(0).locator('.avatar').innerText()).trim().length >= 1);
+    assert.ok((await p.locator('.rvchips').innerText()).includes('Asha Mehta') && (await p.locator('.rvchips').innerText()).includes('Bina Shah'));
+    await p.locator('.chipbtn', { hasText: 'Bina Shah' }).click();
+    assert.strictEqual(await p.locator('.rv').count(), 1); assert.ok((await p.locator('.rv .who').innerText()).includes('Bina Shah'));
+    await p.locator('.chipbtn', { hasText: 'Everyone' }).click(); assert.strictEqual(await p.locator('.rv').count(), n);
+    await p.locator('.rv', { hasText: 'Asha Mehta' }).first().locator('[data-act=open]').click();
+    assert.strictEqual(await p.locator('h1').first().innerText(), 'Asha Mehta');
+    assert.deepStrictEqual(p.errors, []); await p.context().close();
+  });
+
+  await step('assessor views evidence inside the app: pdf, docx, image, text; other Office files get a clear message', async () => {
+    const fx = n => fs.readFileSync(path.join(__dirname, 'fixtures', n));
+    const mime = { pdf: 'application/pdf', png: 'image/png', txt: 'text/plain', xlsx: 'application/vnd.ms-excel', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+    W.as('asha@fsksurat.in');
+    const up = (task, name) => W.call('uploadEvidence', [task, name, mime[name.split('.').pop()], fx(name).toString('base64')]);
+    ['sample.pdf', 'sample.docx', 'sample.png', 'notes.txt', 'budget.xlsx'].forEach(n => up('3.1', n));
+    W.call('saveMyTask', ['3.1', 'submit', 'See files', '']);
+    const p = await open(browser, 'tl@fsksurat.in');
+    const rv = p.locator('.rv', { hasText: 'Nucleus Navigation' });
+    const row = n => rv.locator('li', { hasText: n });
+    await row('sample.pdf').locator('[data-act=viewfile]').click();
+    await row('sample.pdf').locator('.pdfpages canvas').first().waitFor();
+    assert.ok(await row('sample.pdf').locator('.pdfpages canvas').first().evaluate(c => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) return true; return false; }), 'the PDF page has drawn text');
+    assert.strictEqual(await p.evaluate(() => document.querySelectorAll('a[download]').length), 0, 'viewing is not a download');
+    await row('sample.docx').locator('[data-act=viewfile]').click();
+    await row('sample.docx').locator('iframe.vdoc').waitFor();
+    assert.ok((await row('sample.docx').locator('iframe.vdoc').getAttribute('srcdoc')).includes('Boundary casebook: scenario 1'));
+    assert.strictEqual(await row('sample.docx').locator('iframe.vdoc').getAttribute('sandbox'), '', 'documents are shown with scripts disabled');
+    await row('sample.png').locator('[data-act=viewfile]').click();
+    await row('sample.png').locator('img.vimg').waitFor();
+    assert.ok(await row('sample.png').locator('img.vimg').evaluate(i => i.complete && i.naturalWidth === 60));
+    await row('notes.txt').locator('[data-act=viewfile]').click();
+    await row('notes.txt').locator('.vtext').waitFor();
+    assert.ok((await row('notes.txt').locator('.vtext').innerText()).includes('opened up after the third question'));
+    await row('budget.xlsx').locator('[data-act=viewfile]').click();
+    await row('budget.xlsx').locator('.viewer .note').waitFor();
+    assert.ok((await row('budget.xlsx').locator('.viewer').innerText()).includes('Download'));
+    await rv.locator('textarea').fill('Looked at all five files.');       // a re-render keeps open viewers
+    await rv.locator('label[for$="-complete"]').click(); await rv.locator('label[for$="-3"]').click();
+    await p.locator('.chipbtn', { hasText: 'Everyone' }).click();
+    await row('sample.png').locator('img.vimg').waitFor();
+    await row('sample.png').locator('[data-act=viewfile]').click();     // Hide
+    assert.strictEqual(await row('sample.png').locator('img.vimg').count(), 0);
+    await p.screenshot({ path: path.join(shots, '8-evidence-viewer.png'), fullPage: true });
     assert.deepStrictEqual(p.errors, []); await p.context().close();
   });
 

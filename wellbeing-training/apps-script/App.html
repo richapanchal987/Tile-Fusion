@@ -6,8 +6,9 @@ const OUTCOME={complete:['Complete','Meets the standard'],partial:['Partial','So
 const LEVEL={notcleared:'Not cleared for cases',supervised:'Cleared for supervised practice',independent:'Cleared for independent cases'};
 const RANK={notcleared:0,supervised:1,independent:2};
 let D=null,busy=false,SET=null,PH=null;
-const UI={view:null,tid:null,cycle:null,editTrainee:null,editTopic:null,tpf:null,editTask:null,tf:null,archived:false,log:null};
+const UI={view:null,tid:null,cycle:null,rvFilter:null,editTrainee:null,editTopic:null,tpf:null,editTask:null,tf:null,archived:false,log:null};
 const openSet=new Set(),DRAFT={},RES={};
+const FILES={},VIEWING=new Set(); // downloaded evidence (kept so a viewer survives a re-render) and which viewers are open
 
 /* ---------- helpers ---------- */
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -62,6 +63,7 @@ function render(){
   </div></header>
   ${v==='trainee'&&staff&&act.length?`<div class="proto"><label>Trainee <select data-act="pick" aria-label="Choose trainee">${act.map(t=>`<option value="${esc(t.id)}" ${t.id===UI.tid?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label><span>You're viewing their training. Only they can submit work; you can record assessments.</span></div>`:''}
   <main>${v==='trainee'?vTrainee():v==='review'?vReview():v==='team'?vTeam():v==='curriculum'?vCurriculum():vGuide()}</main>`;
+  mountViewers();
 }
 
 /* ---------- trainee view ---------- */
@@ -139,7 +141,8 @@ function vTrainee(){
 
 function filesHtml(tr,t,p,canRemove){
   if(!(p.files||[]).length)return'';
-  return`<ul class="files">${p.files.map(f=>`<li><span>${esc(f.name)} <span class="hint">${mb(f.size)}</span></span><button class="btn ghost small" data-act="openfile" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}" data-fid="${esc(f.id)}">Open</button>${canRemove?`<button class="btn ghost small" data-act="rmfile" data-t="${esc(t.id)}" data-fid="${esc(f.id)}">Remove</button>`:''}</li>`).join('')}</ul>`;
+  return`<ul class="files">${p.files.map(f=>{const on=VIEWING.has(f.id),a=`data-tr="${esc(tr.id)}" data-t="${esc(t.id)}" data-fid="${esc(f.id)}"`;
+    return`<li><div class="filerow"><span>${esc(f.name)} <span class="hint">${mb(f.size)}</span></span><button class="btn small" data-act="viewfile" ${a} aria-expanded="${on}">${on?'Hide':'View'}</button><button class="btn ghost small" data-act="openfile" ${a}>Download</button>${canRemove?`<button class="btn ghost small" data-act="rmfile" data-t="${esc(t.id)}" data-fid="${esc(f.id)}">Remove</button>`:''}</div><div class="viewer" data-viewer="${esc(f.id)}" ${on?'':'hidden'}></div></li>`}).join('')}</ul>`;
 }
 function evidenceView(tr,t,p){
   const link=p.evidence?(isUrl(p.evidence)?`<a href="${esc(p.evidence)}" target="_blank" rel="noopener">${esc(p.evidence)}</a>`:esc(p.evidence)):'';
@@ -160,7 +163,7 @@ function taskCard(tr,t,mine){
     block+=`<div class="myform" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}" style="display:grid;gap:12px">
       <div class="field"><label for="ev-${sl}">Link or reference to your evidence</label><input type="text" id="ev-${sl}" data-f="evidence" value="${esc(ev)}" placeholder="A restricted Drive link, or a Nucleus reference"></div>
       ${filesHtml(tr,t,p,true)}
-      <div class="filepick"><input type="file" id="up-${sl}" data-up="${esc(t.id)}"><label class="btn ghost small" for="up-${sl}">Attach a file</label> <span class="hint">PDF, Office, image, text, mp3, m4a or mp4. Up to ${D.config.maxUploadMb} MB each, ${D.config.maxFiles} files. For anything larger, paste a link.</span></div>
+      <div class="filepick"><input type="file" id="up-${sl}" data-up="${esc(t.id)}"><label class="btn ghost small" for="up-${sl}">Attach a file</label> <span class="hint">PDF, Word (.docx), image, text, mp3, m4a or mp4 can be viewed directly in the app; other Office files can only be downloaded, so a PDF is best. Up to ${D.config.maxUploadMb} MB each, ${D.config.maxFiles} files. For anything larger, paste a link.</span></div>
       <div class="field"><label for="rf-${sl}">Reflection (optional)</label><textarea id="rf-${sl}" data-f="reflection" placeholder="What went well, what you would do differently, what you are unsure about">${esc(rf)}</textarea><span class="hint">Do not write student names or case details. Use initials or a reference.</span></div>
       <div class="row"><button class="btn ghost" data-act="save">Save draft</button><button class="btn" data-act="submit">Submit for review</button></div></div>`;
   }else if(p.status!=='not'||p.evidence||(p.files||[]).length){
@@ -196,13 +199,18 @@ function assessForm(tr,t,p){
   </div>`;
 }
 
+const initials=n=>String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
 function vReview(){
   const items=[];
   D.trainees.forEach(tr=>{if(tr.active)D.tasks.forEach(t=>{if(t.active&&P(tr,t.id).status==='submitted')items.push([tr,t,P(tr,t.id)])})});
   items.sort((a,b)=>String(a[2].submitted).localeCompare(String(b[2].submitted)));
+  const by={};items.forEach(([tr])=>{(by[tr.id]=by[tr.id]||{tr:tr,n:0}).n++});
+  const who=Object.values(by),f=UI.rvFilter&&by[UI.rvFilter]?UI.rvFilter:null,shown=items.filter(i=>!f||i[0].id===f);
   return`<p class="lede">Oldest first. Score each submission against its competency standard. A critical-gate task needs a score of ${D.config.passScore} or more to be Complete.</p>
-  ${items.length?items.map(([tr,t,p])=>`<article class="rv">
-    <div class="rvhead"><div><h3>${esc(t.id)} ${esc(t.name)}</h3><p class="muted">${esc(tr.name)}, cycle ${t.cycle}${p.submitted?', submitted '+fmtDate(p.submitted):''}</p></div><div class="pills">${t.gate?'<span class="pill gate">Critical gate</span>':''}</div></div>
+  ${items.length?`<div class="rvchips" role="group" aria-label="Filter by trainee"><button class="chipbtn ${f?'':'on'}" data-act="rvfilter" data-id="">Everyone <b>${items.length}</b></button>${who.map(w=>`<button class="chipbtn ${f===w.tr.id?'on':''}" data-act="rvfilter" data-id="${esc(w.tr.id)}">${esc(w.tr.name)} <b>${w.n}</b></button>`).join('')}</div>`:''}
+  ${shown.length?shown.map(([tr,t,p])=>`<article class="rv">
+    <div class="rvhead"><div class="rvwho"><span class="avatar" aria-hidden="true">${esc(initials(tr.name))}</span><div><p class="who">${esc(tr.name)}</p><p class="muted">Cycle ${t.cycle}${p.submitted?', submitted '+fmtDate(p.submitted):''} <button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">Open full training</button></p></div></div><div class="pills">${t.gate?'<span class="pill gate">Critical gate</span>':''}</div></div>
+    <h3>${esc(t.id)} ${esc(t.name)}</h3>
     <div class="kv"><h4>Competency standard</h4><p>${esc(t.standard)}</p></div>
     <div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>
     ${p.reflection?`<div class="kv"><h4>Trainee's reflection</h4><p>${esc(p.reflection)}</p></div>`:''}
@@ -340,13 +348,71 @@ function exportTeam(){
 
 /* ---------- events ---------- */
 const readB64=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(new Error('Could not read that file.'));r.readAsDataURL(f)});
+const MIME={pdf:'application/pdf',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',txt:'text/plain',mp3:'audio/mpeg',m4a:'audio/mp4',mp4:'video/mp4',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'};
+const CDN={pdf:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/',mammoth:'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js'};
+const extOf=n=>(String(n).split('.').pop()||'').toLowerCase();
+async function getFile(trId,taskId,fid){
+  if(FILES[fid])return FILES[fid];
+  const f=await call('getEvidenceFile',trId,taskId,fid);
+  const bin=atob(f.data),u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+  return FILES[fid]={name:f.name,bytes:u8,url:null};
+}
+const blobUrl=f=>f.url||(f.url=URL.createObjectURL(new Blob([f.bytes],{type:MIME[extOf(f.name)]||'application/octet-stream'})));
 async function openFile(trId,taskId,fid){
-  try{toast('Opening file…');const f=await call('getEvidenceFile',trId,taskId,fid);
-    const bin=atob(f.data),u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
-    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([u8],{type:f.mime}));a.download=f.name;a.target='_blank';
-    document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast('Downloaded '+f.name);
+  try{toast('Preparing file…');const f=await getFile(trId,taskId,fid);
+    const a=document.createElement('a');a.href=blobUrl(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove();toast('Downloaded '+f.name);
   }catch(e){toast((e&&e.message)||String(e),true)}
 }
+const scriptP={};
+function loadScript(src){return scriptP[src]||(scriptP[src]=new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>{delete scriptP[src];rej(new Error('Could not load the viewer. Check your connection.'))};document.head.appendChild(s)}))}
+async function pdfLib(){
+  await loadScript(CDN.pdf+'pdf.min.js');
+  if(!window.pdfjsLib.GlobalWorkerOptions.workerSrc||!/^blob:/.test(window.pdfjsLib.GlobalWorkerOptions.workerSrc)){
+    const code=await (await fetch(CDN.pdf+'pdf.worker.min.js')).text();  // a blob worker avoids cross-origin worker limits
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
+  }
+  return window.pdfjsLib;
+}
+async function showPdf(el,f){
+  const lib=await pdfLib(),pdf=await lib.getDocument({data:f.bytes.slice()}).promise,max=Math.min(pdf.numPages,30);
+  const wrap=document.createElement('div');wrap.className='pdfpages';el.innerHTML='';el.appendChild(wrap);
+  const width=Math.max(320,Math.min(el.clientWidth||720,900)),dpr=window.devicePixelRatio||1;
+  for(let i=1;i<=max;i++){
+    const page=await pdf.getPage(i),w0=page.getViewport({scale:1}).width,vp=page.getViewport({scale:width/w0*dpr});
+    const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;c.setAttribute('role','img');c.setAttribute('aria-label','Page '+i+' of '+pdf.numPages);
+    wrap.appendChild(c);await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+  }
+  if(pdf.numPages>max){const p=document.createElement('p');p.className='hint';p.textContent='Showing the first '+max+' of '+pdf.numPages+' pages. Download the file to read the rest.';el.appendChild(p)}
+}
+async function showDocx(el,f){
+  await loadScript(CDN.mammoth);
+  const r=await window.mammoth.convertToHtml({arrayBuffer:f.bytes.buffer.slice(f.bytes.byteOffset,f.bytes.byteOffset+f.bytes.byteLength)});
+  const fr=document.createElement('iframe');fr.className='vdoc';fr.title=f.name;fr.setAttribute('sandbox','');  // no scripts can run inside the document
+  fr.srcdoc='<!doctype html><meta charset="utf-8"><style>body{font:15px/1.55 system-ui,sans-serif;margin:14px;color:#1c2b36;background:#fff}img{max-width:100%}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style>'+r.value;
+  el.innerHTML='';el.appendChild(fr);
+}
+async function renderViewer(el,f){
+  const ext=extOf(f.name);el.innerHTML='<p class="hint">Loading…</p>';
+  try{
+    if(ext==='pdf')await showPdf(el,f);
+    else if(ext==='png'||ext==='jpg'||ext==='jpeg')el.innerHTML=`<img class="vimg" alt="${esc(f.name)}" src="${blobUrl(f)}">`;
+    else if(ext==='txt')el.innerHTML=`<pre class="vtext">${esc(new TextDecoder('utf-8').decode(f.bytes.slice(0,200000)))}</pre>`;
+    else if(ext==='mp3'||ext==='m4a')el.innerHTML=`<audio controls src="${blobUrl(f)}" style="width:100%"></audio>`;
+    else if(ext==='mp4')el.innerHTML=`<video controls src="${blobUrl(f)}" style="max-width:100%"></video>`;
+    else if(ext==='docx')await showDocx(el,f);
+    else el.innerHTML='<p class="note">This kind of file cannot be shown in the app. Use Download to open it, or ask the trainee to upload a PDF.</p>';
+  }catch(e){el.innerHTML=`<p class="note red">${esc((e&&e.message)||e)} You can still use Download.</p>`}
+}
+const viewerEl=fid=>document.querySelector(`[data-viewer="${CSS.escape(fid)}"]`);
+async function toggleViewer(trId,taskId,fid){
+  const box=viewerEl(fid),btn=document.querySelector(`[data-act=viewfile][data-fid="${CSS.escape(fid)}"]`);
+  if(!box)return;
+  if(VIEWING.has(fid)){VIEWING.delete(fid);box.hidden=true;box.innerHTML='';if(btn){btn.textContent='View';btn.setAttribute('aria-expanded','false')}return}
+  VIEWING.add(fid);box.hidden=false;box.innerHTML='<p class="hint">Loading…</p>';if(btn){btn.textContent='Hide';btn.setAttribute('aria-expanded','true')}
+  try{const f=await getFile(trId,taskId,fid);if(VIEWING.has(fid)){const b=viewerEl(fid);if(b)await renderViewer(b,f)}}
+  catch(e){VIEWING.delete(fid);const b=viewerEl(fid);if(b){b.hidden=true;b.innerHTML=''}if(btn){btn.textContent='View';btn.setAttribute('aria-expanded','false')}toast((e&&e.message)||String(e),true)}
+}
+function mountViewers(){VIEWING.forEach(fid=>{const el=viewerEl(fid);if(el&&FILES[fid]&&!el.firstChild)renderViewer(el,FILES[fid])})}
 const checked=n=>Array.from(document.querySelectorAll(`input[name="${n}"]:checked`)).map(x=>x.value);
 const val=id=>{const e=document.getElementById(id);return e?e.value:''};
 
@@ -368,6 +434,8 @@ document.addEventListener('click',e=>{
       run('saveMyTask',[id,a,ev,rf],a==='submit'?'Submitted for review':'Draft saved',null,()=>{delete DRAFT[dk(UI.tid,id,'evidence')];delete DRAFT[dk(UI.tid,id,'reflection')]});break}
     case'rmfile':openSet.add(UI.tid+'|'+ds.t);run('removeEvidence',[ds.t,ds.fid],'File removed');break;
     case'openfile':openFile(ds.tr,ds.t,ds.fid);break;
+    case'viewfile':toggleViewer(ds.tr,ds.t,ds.fid);break;
+    case'rvfilter':UI.rvFilter=ds.id||null;render();break;
     case'assess':{
       const tr=form.dataset.tr,id=form.dataset.t,oc=$('input[data-f=outcome]:checked',form),sc=$('input[data-f=score]:checked',form);
       if(!oc){toast('Choose an outcome.',true);return}

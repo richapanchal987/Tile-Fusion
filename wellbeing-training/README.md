@@ -69,6 +69,7 @@ Both gate cycles, the pass score, the number of cycles and days, and the phases 
 ## Evidence and privacy
 
 - Uploads (PDF, Office files, images, text, mp3, m4a, mp4; up to 10 MB each, 5 per task) go to a private Drive folder, one sub-folder per trainee. The folder is not shared. The app serves a file only to that trainee and their assessors and admins.
+- Assessors read evidence inside the app with the **View** button: PDF, Word (.docx), images, text, and audio or video play in place. **Download** is always available too. Older Office files (.doc, .xls, .xlsx, .ppt, .pptx) cannot be previewed in a browser, so the app says so and offers Download; trainees are told that a PDF is best. The PDF and Word viewers load their code from `cdnjs.cloudflare.com`, so if the school network blocks that address those two fall back to Download.
 - Anything bigger, such as a recording, should be a link. Recording is never the default requirement.
 - The forms ask trainees not to enter student names or case details.
 - Every submission, assessment, readiness decision and module change is recorded in the activity log.
@@ -95,6 +96,8 @@ Still for you to decide:
 node tests/logic.test.js     # weights, gates, calendar, readiness (no dependencies)
 node tests/server.test.js    # the real Code.gs against fake Google services
 NODE_PATH=$(npm root -g) node tests/e2e.js   # the real pages in headless Chromium, screenshots in tests/shots/
+                                              # (the PDF/Word viewer steps load pdfjs-dist 3.11.174 and mammoth 1.6.0 from
+                                              #  LIBS_DIR, default /tmp/claude-0/libs/node_modules: npm install them there)
 ```
 
 These run the same code that is deployed, but against stand-ins for Google's services. A first deployment in your own Google account is still the real test: please click through one trainee and one assessor journey.
