@@ -1,0 +1,437 @@
+<script>
+'use strict';
+const SCALE={1:'Not yet competent',2:'Developing',3:'Competent',4:'Proficient'};
+const STATUS={not:'Not started',progress:'In progress',submitted:'Awaiting review',complete:'Complete',partial:'Partial',rework:'Rework',exempt:'Exempt'};
+const OUTCOME={complete:['Complete','Meets the standard'],partial:['Partial','Some is there; say what is missing'],rework:['Rework','Not yet; trainee redoes and resubmits'],exempt:['Exempt','Not needed, for example prior experience']};
+const LEVEL={notcleared:'Not cleared for cases',supervised:'Cleared for supervised practice',independent:'Cleared for independent cases'};
+const RANK={notcleared:0,supervised:1,independent:2};
+let D=null,busy=false,SET=null,PH=null;
+const UI={view:null,tid:null,cycle:null,editTrainee:null,editTopic:null,tpf:null,editTask:null,tf:null,archived:false,log:null};
+const openSet=new Set(),DRAFT={},RES={};
+
+/* ---------- helpers ---------- */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $=(s,r)=>(r||document).querySelector(s);
+const isStaff=()=>!!D&&(D.me.role==='Admin'||D.me.role==='Assessor');
+const isAdmin=()=>!!D&&D.me.role==='Admin';
+const slug=s=>String(s).replace(/\W/g,'_');
+const isUrl=u=>/^https?:\/\//i.test(u||'');
+const T=id=>D.trainees.find(t=>t.id===id);
+const P=(tr,id)=>tr.p[id]||{status:'not',files:[]};
+const topicOf=id=>D.topics.find(t=>t.id===id)||{name:'Topic '+id,w:0};
+const phaseOf=c=>{const p=D.config.phases.find(x=>c>=x.from&&c<=x.to);return p?p.name:''};
+const phaseShort=c=>phaseOf(c).replace(/^Phase \d+\s*[-:]\s*/,'');
+const fmtDate=d=>{if(!d)return'';try{return new Date(String(d).slice(0,10)+'T00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}catch(e){return d}};
+const fmtShort=d=>{try{return new Date(d+'T00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})}catch(e){return d}};
+const mb=n=>n<1024?n+' B':n<1048576?Math.round(n/1024)+' KB':(n/1048576).toFixed(1)+' MB';
+const dk=(tid,task,f)=>tid+'|'+task+'|'+f;
+const dv=(tid,task,f,fb)=>{const k=dk(tid,task,f);return k in DRAFT?DRAFT[k]:fb};
+const resFor=t=>D.res.filter(r=>r.task===t.id).concat(D.res.filter(r=>r.topic===t.topic&&!r.task));
+
+function call(fn,...args){return new Promise((res,rej)=>google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args))}
+function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast show'+(err?' err':'');clearTimeout(t._h);t._h=setTimeout(()=>t.className='toast',err?7000:2500)}
+function pendingTotal(){return D.trainees.reduce((a,t)=>a+(t.active?t.stats.pending:0),0)}
+function setData(d){
+  D=d;if(!D.tasks)return;
+  D.tasks.sort((a,b)=>a.cycle-b.cycle||a.order-b.order);
+  const staff=isStaff();
+  if(!UI.view)UI.view=staff&&pendingTotal()?'review':'trainee';
+  const act=D.trainees.filter(t=>t.active);
+  if(staff){if(!UI.tid||!act.some(t=>t.id===UI.tid))UI.tid=(act[0]||{}).id}else UI.tid=D.me.email;
+}
+async function run(fn,args,ok,start,after){
+  if(busy)return;busy=true;document.body.classList.add('busy');if(start)toast(start);
+  try{setData(await call(fn,...args));if(after)after();toast(ok)}catch(e){toast((e&&e.message)||String(e),true)}
+  finally{busy=false;document.body.classList.remove('busy');render()}
+}
+
+/* ---------- shell ---------- */
+function render(){
+  const app=$('#app');
+  if(!D){app.innerHTML='<div class="center"><h2>Loading your training</h2><p class="muted">One moment.</p></div>';return}
+  if(D.me.role==='None'){app.innerHTML=`<div class="center"><h1>You're not enrolled yet</h1><p class="muted">You're signed in as ${esc(D.me.email||'an unknown account')}. Ask the Well-being TL to enrol you, then reload this page.</p></div>`;return}
+  const staff=isStaff(),pend=staff?pendingTotal():0;
+  const tabs=staff?[['review','Reviews'],['trainee','Trainee'],['team','Team']].concat(isAdmin()?[['curriculum','Curriculum']]:[]).concat([['guide','Guide']]):[['trainee','My training'],['guide','Guide']];
+  const v=UI.view;
+  const act=D.trainees.filter(t=>t.active);
+  app.innerHTML=`
+  <header class="top"><div class="top-in">
+    <div class="brand">${esc(D.config.appName)}<small>${esc(D.config.orgName)}</small></div>
+    <nav class="tabs" aria-label="Sections">${tabs.map(([k,l])=>`<button class="tab" data-act="view" data-v="${k}" ${v===k?'aria-current="page"':''}>${l}${k==='review'&&pend?`<span class="count">${pend}</span>`:''}</button>`).join('')}</nav>
+    <span class="who-chip">${esc(D.me.name||D.me.email)}, ${D.me.role==='Admin'?'admin':D.me.role==='Assessor'?'assessor':'trainee'}</span>
+  </div></header>
+  ${v==='trainee'&&staff&&act.length?`<div class="proto"><label>Trainee <select data-act="pick" aria-label="Choose trainee">${act.map(t=>`<option value="${esc(t.id)}" ${t.id===UI.tid?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label><span>You're viewing their training. Only they can submit work; you can record assessments.</span></div>`:''}
+  <main>${v==='trainee'?vTrainee():v==='review'?vReview():v==='team'?vTeam():v==='curriculum'?vCurriculum():vGuide()}</main>`;
+}
+
+/* ---------- trainee view ---------- */
+function paceChip(tr){
+  const s=tr.stats;
+  if(s.calendarState==='notstarted')return`<span class="chip">Starts ${fmtDate(tr.start)}</span>`;
+  if(s.finished)return`<span class="chip good">All cycles worked through</span>`;
+  const tip=`The calendar puts this trainee in cycle ${s.expected}; their work is in cycle ${s.current}.`;
+  if(s.behind>0)return`<span class="chip warn" title="${esc(tip)}">${s.behind} cycle${s.behind>1?'s':''} behind the calendar</span>`;
+  if(s.behind<0)return`<span class="chip good" title="${esc(tip)}">${-s.behind} cycle${s.behind<-1?'s':''} ahead of the calendar</span>`;
+  return`<span class="chip good" title="${esc(tip)}">On track with the calendar</span>`;
+}
+
+function readyCard(tr){
+  const s=tr.stats,lv=s.effective,c=D.config,staff=isStaff();
+  const gateCycle=tr.pathway==='Urgent'?c.urgentGateCycle:c.supervisedGateCycle;
+  const lines=[];
+  if(lv==='notcleared')lines.push(`Pass every critical gate up to cycle ${gateCycle} to become eligible for supervised practice.`);
+  if(lv==='supervised')lines.push('Can take cases with a supervisor present. Pass the remaining critical gates for independent cases.');
+  if(lv==='independent')lines.push('All critical gates passed and signed off.');
+  if(s.needsReview)lines.push(`Clearance on record (${LEVEL[s.confirmed].toLowerCase()}) needs review: a critical gate no longer passes.`);
+  else if(RANK[s.eligible]>RANK[lv])lines.push(`Gates passed for ${LEVEL[s.eligible].toLowerCase()}. Waiting for ${s.eligible==='independent'?'the Principal':'the TL'} to confirm.`);
+  if(lv!=='notcleared'&&tr.confirmedBy)lines.push(`Confirmed by ${esc(tr.confirmedBy)}, ${fmtDate(tr.confirmedAt)}.${tr.confirmNote?' '+esc(tr.confirmNote):''}`);
+  let ctl='';
+  if(staff){
+    const b=[];
+    if(RANK[s.eligible]>=1&&RANK[lv]<1)b.push(`<button class="btn small" data-act="ready" data-lv="supervised">Confirm supervised practice</button>`);
+    if(s.eligible==='independent'&&lv!=='independent')b.push(isAdmin()?`<button class="btn small" data-act="ready" data-lv="independent">Confirm independent clearance</button>`:`<span class="hint">The Principal or an admin confirms independent clearance.</span>`);
+    if(lv!=='notcleared')b.push(`<button class="btn small danger" data-act="ready" data-lv="notcleared">Withdraw clearance</button>`);
+    if(b.length)ctl=`<div class="field"><input type="text" id="rd-note" placeholder="Note (optional)" aria-label="Note for this decision"></div><div class="row">${b.join('')}</div>`;
+  }
+  return`<div class="ready ${lv}" role="status"><h2>${LEVEL[lv]}</h2>${lines.map(l=>`<p>${l}</p>`).join('')}${ctl}</div>`;
+}
+
+function pathHtml(tr,cyc){
+  const s=tr.stats,N=D.config.cycles,starts=new Set(D.config.phases.map(p=>p.from)),cal=tr.cal||[],sg=D.config.supervisedGateCycle;
+  let h='';
+  for(let c=1;c<=N;c++){
+    const f=s.fractions[c-1]||0,cd=cal[c-1],now=s.calendarState==='active'&&s.expected===c;
+    h+=`<button class="node ${c===1?'first':''} ${c===cyc?'sel':''} ${f>=1?'full':''} ${c>1&&(s.fractions[c-2]||0)>=1?'done':''}" data-act="cycle" data-c="${c}" aria-label="Cycle ${c}, ${Math.round(f*100)} percent done${cd?', '+fmtShort(cd.start)+' to '+fmtShort(cd.end):''}" aria-pressed="${c===cyc}" style="--f:${f*360}deg">
+      <span class="dot"><span>${c}</span></span><span class="cl">${starts.has(c)?esc(phaseShort(c)):''}</span><span class="cd">${cd?fmtShort(cd.start):''}</span><span class="now" ${now?'':'style="visibility:hidden"'}>Today</span></button>`;
+    if(c===sg&&sg>0&&sg<N)h+=`<div class="gatemark ${RANK[s.effective]>=1?'open':''}"><div class="bar"></div><span>Supervised practice</span></div>`;
+    if(c===N)h+=`<div class="gatemark ${s.effective==='independent'?'open':''}"><div class="bar"></div><span>Independent cases</span></div>`;
+  }
+  return h;
+}
+
+function meter(l,v,h){return`<div class="meter"><div class="lab"><span>${l}</span><b>${v==null?'Not assessed yet':v+'%'}</b></div><div class="track"><i style="width:${v||0}%"></i></div><p class="hint">${h}</p></div>`}
+
+function vTrainee(){
+  const tr=T(UI.tid);
+  if(!tr)return`<div class="empty" style="margin-top:24px">No trainees enrolled yet.${isAdmin()?' Enrol one from the Team tab.':''}</div>`;
+  const s=tr.stats,cyc=UI.cycle||s.current,N=D.config.cycles,cd=(tr.cal||[])[cyc-1];
+  const tasks=D.tasks.filter(t=>t.cycle===cyc&&t.active);
+  const mine=D.me.role==='Trainee'&&tr.id===D.me.email;
+  return`
+  <section class="hero">
+    <div><h1>${esc(tr.name)}</h1>
+      <p class="meta">Started ${fmtDate(tr.start)}. ${tr.assessorNames.length?'Assessors: '+tr.assessorNames.map(esc).join(', ')+'.':'No assessor assigned yet.'}</p>
+      <div class="chips"><span class="chip">${esc(tr.pathway)} pathway</span>${paceChip(tr)}<span class="chip">Cycle ${s.current} of ${N}, ${esc(phaseShort(s.current))}</span></div>
+      <p class="row" style="margin-top:12px"><button class="btn ghost small" data-act="export-tracker">Download my tracker (CSV)</button></p></div>
+    ${readyCard(tr)}
+  </section>
+  <div class="pathwrap"><div class="path">${pathHtml(tr,cyc)}</div></div>
+  <div class="cols">
+    <section><div class="sechead"><h2>Cycle ${cyc}</h2><span class="muted">${esc(phaseOf(cyc))}${cd?', '+fmtShort(cd.start)+' to '+fmtShort(cd.end):''}, ${tasks.length} task${tasks.length===1?'':'s'}</span></div>
+      ${tasks.map(t=>taskCard(tr,t,mine)).join('')||'<div class="empty">No tasks in this cycle.</div>'}</section>
+    <aside>
+      <div class="card">${meter('Training completion',s.completion,'Tasks an assessor has marked Complete, weighted by topic')}${meter('Competency',s.competency,'Average score of assessed tasks, weighted')}<p class="hint">A high percentage cannot make up for a critical gate that is not passed.</p></div>
+      <div class="card"><details ${openSet.has('gates')?'open':''} data-key="gates"><summary>Critical gates: ${s.gatesPassed} of ${s.gatesTotal}</summary><ul class="gl">${s.gates.map(g=>`<li class="${g.state}"><span class="ic" aria-hidden="true"></span><span>${esc(g.id)} ${esc(g.name)}<small>${g.state==='pass'?'Passed':g.state==='attention'?'Needs another attempt':'Cycle '+g.cycle}</small></span></li>`).join('')}</ul></details></div>
+    </aside>
+  </div>`;
+}
+
+function filesHtml(tr,t,p,canRemove){
+  if(!(p.files||[]).length)return'';
+  return`<ul class="files">${p.files.map(f=>`<li><span>${esc(f.name)} <span class="hint">${mb(f.size)}</span></span><button class="btn ghost small" data-act="openfile" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}" data-fid="${esc(f.id)}">Open</button>${canRemove?`<button class="btn ghost small" data-act="rmfile" data-t="${esc(t.id)}" data-fid="${esc(f.id)}">Remove</button>`:''}</li>`).join('')}</ul>`;
+}
+function evidenceView(tr,t,p){
+  const link=p.evidence?(isUrl(p.evidence)?`<a href="${esc(p.evidence)}" target="_blank" rel="noopener">${esc(p.evidence)}</a>`:esc(p.evidence)):'';
+  if(!link&&!(p.files||[]).length)return'<p class="hint">No evidence added.</p>';
+  return`${link?`<p>${link}</p>`:''}${filesHtml(tr,t,p,false)}`;
+}
+
+function taskCard(tr,t,mine){
+  const p=P(tr,t.id),res=resFor(t),key=tr.id+'|'+t.id,staff=isStaff(),sl=slug(key);
+  const editable=['not','progress','partial','rework'].includes(p.status);
+  let block='';
+  const fb=p.feedback?`<b>${p.assessor?esc(p.assessor)+':':'Feedback:'}</b> ${esc(p.feedback)}`:'';
+  if(p.status==='complete'||p.status==='exempt')block+=`<div class="note green"><b>${STATUS[p.status]}${p.score?', '+p.score+' of 4, '+SCALE[p.score]:''}.</b> ${fb}<br><span class="hint">${p.date?fmtDate(p.date):''}</span></div>`;
+  if(p.status==='partial'||p.status==='rework')block+=`<div class="note ${p.status==='rework'?'red':'amber'}"><b>${STATUS[p.status]}${p.score?', '+p.score+' of 4':''}.</b> ${fb}</div>`;
+  if(p.status==='submitted')block+=`<div class="note"><b>Submitted${p.submitted?' '+fmtDate(p.submitted):''}. Waiting for review.</b></div>`;
+  if(mine&&editable){
+    const ev=dv(tr.id,t.id,'evidence',p.evidence||''),rf=dv(tr.id,t.id,'reflection',p.reflection||'');
+    block+=`<div class="myform" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}" style="display:grid;gap:12px">
+      <div class="field"><label for="ev-${sl}">Link or reference to your evidence</label><input type="text" id="ev-${sl}" data-f="evidence" value="${esc(ev)}" placeholder="A restricted Drive link, or a Nucleus reference"></div>
+      ${filesHtml(tr,t,p,true)}
+      <div class="filepick"><input type="file" id="up-${sl}" data-up="${esc(t.id)}"><label class="btn ghost small" for="up-${sl}">Attach a file</label> <span class="hint">PDF, Office, image, text, mp3, m4a or mp4. Up to ${D.config.maxUploadMb} MB each, ${D.config.maxFiles} files. For anything larger, paste a link.</span></div>
+      <div class="field"><label for="rf-${sl}">Reflection (optional)</label><textarea id="rf-${sl}" data-f="reflection" placeholder="What went well, what you would do differently, what you are unsure about">${esc(rf)}</textarea><span class="hint">Do not write student names or case details. Use initials or a reference.</span></div>
+      <div class="row"><button class="btn ghost" data-act="save">Save draft</button><button class="btn" data-act="submit">Submit for review</button></div></div>`;
+  }else if(p.status!=='not'||p.evidence||(p.files||[]).length){
+    block+=`<div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>${p.reflection?`<div class="kv"><h4>Reflection</h4><p>${esc(p.reflection)}</p></div>`:''}`;
+  }
+  if(staff)block+=assessForm(tr,t,p);
+  return`<details class="task" data-key="${esc(key)}" ${openSet.has(key)?'open':''}>
+    <summary><span class="tid">${esc(t.id)}</span><span class="tname">${esc(t.name)}</span>
+      <span class="pills">${t.gate?'<span class="pill gate">Critical gate</span>':''}<span class="pill s-${p.status}">${STATUS[p.status]}</span></span>
+      <span class="ttopic">${esc(topicOf(t.topic).name)}${t.type?', '+esc(t.type.toLowerCase()):''}</span></summary>
+    <div class="tbody">
+      <div class="kv"><h4>What you'll do</h4><p>${esc(t.what)}</p></div>
+      <div class="kv"><h4>What good looks like</h4><p>${esc(t.standard)}${t.gate?`\nCritical gate: needs Complete with a score of ${D.config.passScore} or more.`:''}</p></div>
+      <div class="kv"><h4>Evidence to submit</h4><p>${esc(t.evidence)}</p></div>
+      <div class="kv"><h4>Resources</h4><ul class="res">${res.map(r=>`<li>${isUrl(r.url)?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.label)}</a>`:`<span>${esc(r.label)}</span><span class="nolink">link not added yet</span>`}${r.note?`<span class="hint">${esc(r.note)}</span>`:''}</li>`).join('')||'<li class="nolink">No resources yet</li>'}</ul></div>
+      ${staff?`<p class="hint">Counts ${t.w}% toward training completion.</p>`:''}
+      ${block}
+    </div></details>`;
+}
+
+/* ---------- assessing ---------- */
+function assessForm(tr,t,p){
+  const sl=slug(tr.id+'_'+t.id),assessed=['complete','partial','rework','exempt'].includes(p.status);
+  const oc=dv(tr.id,t.id,'outcome',assessed?p.status:''),sc=dv(tr.id,t.id,'score',assessed&&p.score?String(p.score):''),fb=dv(tr.id,t.id,'feedback',assessed?p.feedback:'');
+  const outs=Object.keys(OUTCOME).filter(k=>!(k==='exempt'&&t.gate));
+  return`<div class="assessform" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}" data-gate="${t.gate}">
+    <h4>${assessed?'Update assessment':p.status==='submitted'?'Assess this submission':'Record an assessment'}</h4>
+    ${p.status==='not'||p.status==='progress'?'<p class="hint">Use this for tasks you observe directly, such as role plays, vivas and observed sessions. The trainee does not have to submit anything first.</p>':''}
+    <fieldset><legend class="hint">Outcome</legend><div class="seg">${outs.map(k=>`<input type="radio" name="oc-${sl}" id="oc-${sl}-${k}" value="${k}" data-f="outcome" ${oc===k?'checked':''}><label for="oc-${sl}-${k}"><b>${OUTCOME[k][0]}</b><span class="hint" style="display:block">${OUTCOME[k][1]}</span></label>`).join('')}</div></fieldset>
+    <fieldset><legend class="hint">Score${t.gate?` (a critical gate needs ${D.config.passScore} or more to be Complete)`:''}</legend><div class="scale">${[1,2,3,4].map(s=>`<input type="radio" name="sc-${sl}" id="sc-${sl}-${s}" value="${s}" data-f="score" ${sc===String(s)?'checked':''}><label for="sc-${sl}-${s}"><b>${s}</b>${SCALE[s]}</label>`).join('')}</div></fieldset>
+    <div class="field"><label for="fb-${sl}">Feedback and development goal</label><textarea id="fb-${sl}" data-f="feedback">${esc(fb)}</textarea></div>
+    <div class="row"><button class="btn" data-act="assess">Save assessment</button>${assessed&&p.assessor?`<span class="hint">Last by ${esc(p.assessor)}, ${fmtDate(p.date)}</span>`:''}</div>
+  </div>`;
+}
+
+function vReview(){
+  const items=[];
+  D.trainees.forEach(tr=>{if(tr.active)D.tasks.forEach(t=>{if(t.active&&P(tr,t.id).status==='submitted')items.push([tr,t,P(tr,t.id)])})});
+  items.sort((a,b)=>String(a[2].submitted).localeCompare(String(b[2].submitted)));
+  return`<p class="lede">Oldest first. Score each submission against its competency standard. A critical-gate task needs a score of ${D.config.passScore} or more to be Complete.</p>
+  ${items.length?items.map(([tr,t,p])=>`<article class="rv">
+    <div class="rvhead"><div><h3>${esc(t.id)} ${esc(t.name)}</h3><p class="muted">${esc(tr.name)}, cycle ${t.cycle}${p.submitted?', submitted '+fmtDate(p.submitted):''}</p></div><div class="pills">${t.gate?'<span class="pill gate">Critical gate</span>':''}</div></div>
+    <div class="kv"><h4>Competency standard</h4><p>${esc(t.standard)}</p></div>
+    <div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>
+    ${p.reflection?`<div class="kv"><h4>Trainee's reflection</h4><p>${esc(p.reflection)}</p></div>`:''}
+    ${p.feedback?`<div class="note amber"><b>Earlier feedback:</b> ${esc(p.feedback)}</div>`:''}
+    ${assessForm(tr,t,p)}</article>`).join(''):'<div class="empty">No reviews waiting. When a trainee submits a task it appears here.</div>'}`;
+}
+
+/* ---------- team ---------- */
+function vTeam(){
+  const list=D.trainees.filter(t=>UI.archived||t.active);
+  const admin=isAdmin(),assessors=(D.staff||[]);
+  return`<p class="lede">Everyone in onboarding, from one master plan.</p>
+  ${list.length?`<div class="tablewrap"><table><thead><tr><th>Trainee</th><th>Assessors</th><th>Started</th><th>Pathway</th><th>Cycle</th><th>Completion</th><th>Competency</th><th>Gates</th><th>Readiness</th><th>Waiting</th>${admin?'<th></th>':''}</tr></thead><tbody>
+  ${list.map(tr=>{const s=tr.stats;return`<tr style="${tr.active?'':'opacity:.6'}"><td><button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">${esc(tr.name)}</button>${tr.active?'':' <span class="hint">archived</span>'}</td><td>${tr.assessorNames.map(esc).join(', ')||'<span class="hint">Any assessor</span>'}</td><td>${fmtDate(tr.start)}</td><td>${esc(tr.pathway)}</td><td class="num">${s.current} of ${D.config.cycles}${s.behind>0?` <span class="chip warn">${s.behind} behind</span>`:''}</td><td class="num">${s.completion}%</td><td class="num">${s.competency==null?'Not assessed':s.competency+'%'}</td><td class="num">${s.gatesPassed} of ${s.gatesTotal}</td><td><span class="rbadge ${s.effective}">${LEVEL[s.effective]}</span></td><td class="num">${s.pending||''}</td>${admin?`<td><button class="btn ghost small" data-act="edit-trainee" data-id="${esc(tr.id)}">Edit</button></td>`:''}</tr>`}).join('')}
+  </tbody></table></div>`:'<div class="empty">No trainees enrolled yet.</div>'}
+  <div class="row" style="margin-bottom:18px"><label class="row"><input type="checkbox" data-act="archived" ${UI.archived?'checked':''}> Show archived</label><button class="btn ghost small" data-act="export-team">Download team summary (CSV)</button></div>
+  ${admin?teamAdmin(assessors):''}`;
+}
+
+function assessorChecks(name,staff,sel){
+  const a=(staff||[]).filter(s=>true);
+  return a.length?`<div class="checks" role="group" aria-label="Assessors">${a.map(s=>`<label><input type="checkbox" name="${name}" value="${esc(s.email)}" ${sel.includes(s.email)?'checked':''}> ${esc(s.name)}</label>`).join('')}</div>`:'<p class="hint">Add staff below first.</p>';
+}
+function teamAdmin(staff){
+  const et=UI.editTrainee?T(UI.editTrainee):null;
+  const today=D.config.today;
+  return`
+  ${et?`<div class="panel" id="et"><h3>Edit ${esc(et.name)}</h3>
+    <div class="formgrid"><div class="field"><label for="et-name">Name</label><input type="text" id="et-name" value="${esc(et.name)}"></div>
+    <div class="field"><label for="et-start">Start date</label><input type="date" id="et-start" value="${esc(et.start)}"></div>
+    <div class="field"><label for="et-path">Pathway</label><select class="big" id="et-path">${D.config.pathways.map(p=>`<option ${p===et.pathway?'selected':''}>${p}</option>`).join('')}</select></div></div>
+    <div class="field"><span class="lbl">Assessors (leave empty to let any assessor see this trainee)</span>${assessorChecks('et-as',staff,et.assessors)}</div>
+    <label class="row"><input type="checkbox" id="et-active" ${et.active?'checked':''}> Currently in training (untick to archive)</label>
+    <div class="row"><button class="btn" data-act="trainee-save">Save</button><button class="btn ghost" data-act="trainee-cancel">Cancel</button></div></div>`:''}
+  <div class="panel"><h3>Enrol a trainee</h3>
+    <div class="formgrid"><div class="field"><label for="nt-name">Full name</label><input type="text" id="nt-name"></div>
+    <div class="field"><label for="nt-email">School email</label><input type="text" id="nt-email" placeholder="name@${esc(D.config.domain)}"></div>
+    <div class="field"><label for="nt-start">Start date</label><input type="date" id="nt-start" value="${esc(today)}"></div>
+    <div class="field"><label for="nt-path">Pathway</label><select class="big" id="nt-path">${D.config.pathways.map(p=>`<option>${p}</option>`).join('')}</select></div></div>
+    <div class="field"><span class="lbl">Assessors</span>${assessorChecks('nt-as',staff,[])}</div>
+    <div class="row"><button class="btn" data-act="enrol">Enrol trainee</button></div></div>
+  <div class="panel"><h3>Staff</h3>
+    <div class="tablewrap" style="margin:0"><table style="min-width:520px"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody>
+    ${staff.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.email)}</td><td><select aria-label="Role for ${esc(s.name)}" data-staffrole="${esc(s.email)}" data-name="${esc(s.name)}"><option ${s.role==='Admin'?'selected':''}>Admin</option><option ${s.role==='Assessor'?'selected':''}>Assessor</option></select></td><td>${s.email===D.me.email?'':`<button class="btn ghost small" data-act="staff-remove" data-email="${esc(s.email)}">Remove</button>`}</td></tr>`).join('')}</tbody></table></div>
+    <p class="hint">Admins edit the module, enrol trainees and confirm independent clearance (the Principal should be an admin). Assessors review work and confirm supervised practice.</p>
+    <div class="formgrid"><div class="field"><label for="sf-name">Name</label><input type="text" id="sf-name"></div><div class="field"><label for="sf-email">School email</label><input type="text" id="sf-email" placeholder="name@${esc(D.config.domain)}"></div>
+    <div class="field"><label for="sf-role">Role</label><select class="big" id="sf-role"><option>Assessor</option><option>Admin</option></select></div>
+    <div class="row"><button class="btn" data-act="staff-add">Add</button></div></div></div>
+  <div class="panel"><h3>Activity log</h3><p class="hint">Who submitted, assessed, confirmed or changed what, most recent first.</p>
+    <div class="row"><button class="btn ghost small" data-act="log">${UI.log?'Refresh':'Show recent activity'}</button></div>
+    ${UI.log?(UI.log.length?`<div class="tablewrap" style="margin:0"><table style="min-width:680px"><thead><tr><th>When</th><th>By</th><th>Action</th><th>Trainee</th><th>Task</th><th>Detail</th></tr></thead><tbody>${UI.log.map(l=>`<tr><td class="num">${esc(l.time)}</td><td>${esc(l.by)}</td><td>${esc(l.action)}</td><td>${esc(l.trainee)}</td><td>${esc(l.task)}</td><td>${esc(l.detail)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="hint">Nothing recorded yet.</p>'):''}</div>`;
+}
+
+/* ---------- curriculum (admin) ---------- */
+function resEditor(topic,task){
+  const k=topic+'|'+task;
+  if(!RES[k])RES[k]=D.res.filter(r=>r.topic===topic&&r.task===task).map(r=>Object.assign({},r));
+  return`<div class="kv"><h4>${task?'Resources for this task':'Resources for the whole topic'}</h4>
+    ${RES[k].map((r,i)=>`<div class="resrow"><input type="text" aria-label="Resource name" placeholder="Name" value="${esc(r.label)}" data-rs="${k}" data-i="${i}" data-rf="label"><input type="text" aria-label="Resource link" placeholder="Link (https://...)" value="${esc(r.url)}" data-rs="${k}" data-i="${i}" data-rf="url"><input type="text" aria-label="Note" placeholder="Note (optional)" value="${esc(r.note)}" data-rs="${k}" data-i="${i}" data-rf="note"><button class="btn ghost small" data-act="res-del" data-scope="${k}" data-i="${i}">Remove</button></div>`).join('')}
+    <div class="row"><button class="btn ghost small" data-act="res-add" data-scope="${k}">Add resource</button><button class="btn small" data-act="res-save" data-scope="${k}" data-topic="${topic}" data-task="${esc(task)}">Save resources</button></div></div>`;
+}
+
+function taskForm(){
+  const f=UI.tf,isNew=UI.editTask.startsWith('new:'),N=D.config.cycles;
+  return`<div class="taskform" id="tf">
+    <div class="formgrid"><div class="field"><label for="tf-id">Task ID</label><input type="text" id="tf-id" data-tf="id" value="${esc(f.id)}" ${isNew?'':'readonly'}></div>
+    <div class="field"><label for="tf-name">Task name</label><input type="text" id="tf-name" data-tf="name" value="${esc(f.name)}"></div>
+    <div class="field"><label for="tf-topic">Topic</label><select class="big" id="tf-topic" data-tf="topic">${D.topics.map(t=>`<option value="${t.id}" ${t.id===f.topic?'selected':''}>${t.id}. ${esc(t.name)}</option>`).join('')}</select></div>
+    <div class="field"><label for="tf-cycle">Cycle</label><select class="big" id="tf-cycle" data-tf="cycle">${Array.from({length:N},(_,i)=>`<option value="${i+1}" ${i+1===f.cycle?'selected':''}>Cycle ${i+1}</option>`).join('')}</select></div>
+    <div class="field"><label for="tf-type">Type</label><select class="big" id="tf-type" data-tf="type">${D.config.taskTypes.map(x=>`<option ${x===f.type?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="field"><label for="tf-weight">Weight within topic</label><input type="number" min="0" step="0.5" id="tf-weight" data-tf="weight" value="${esc(f.weight)}"></div></div>
+    <div class="checks"><label><input type="checkbox" data-tf="gate" ${f.gate?'checked':''}> Critical gate (must be passed before clearance)</label></div>
+    <div class="field"><label for="tf-what">What the trainee will do</label><textarea id="tf-what" data-tf="what">${esc(f.what)}</textarea></div>
+    <div class="field"><label for="tf-standard">Competency standard (what good looks like)</label><textarea id="tf-standard" data-tf="standard">${esc(f.standard)}</textarea></div>
+    <div class="field"><label for="tf-evidence">Evidence / output</label><input type="text" id="tf-evidence" data-tf="evidence" value="${esc(f.evidence)}"></div>
+    <div class="row"><button class="btn" data-act="task-save">Save task</button><button class="btn ghost" data-act="task-cancel">Cancel</button></div>
+    ${isNew?'<p class="hint">Save the task first, then you can add resources to it.</p>':resEditor(f.topic,f.id)}</div>`;
+}
+
+function vCurriculum(){
+  if(!SET){SET=Object.assign({},{cycles:D.config.cycles,daysPerCycle:D.config.daysPerCycle,passScore:D.config.passScore,supervisedGateCycle:D.config.supervisedGateCycle,urgentGateCycle:D.config.urgentGateCycle,maxUploadMb:D.config.maxUploadMb});PH=D.config.phases.map(p=>Object.assign({},p))}
+  const total=D.topics.reduce((a,t)=>a+t.w,0);
+  const setField=(k,l,min,max)=>`<div class="field"><label for="st-${k}">${l}</label><input type="number" id="st-${k}" min="${min}" max="${max}" data-set="${k}" value="${esc(SET[k])}"></div>`;
+  return`<p class="lede">Everything a trainee sees comes from here. Changes apply straight away. Tasks are archived rather than deleted, so nobody loses past progress.</p>
+  <section class="topic"><h3>Programme settings</h3>
+    <div class="formgrid">${setField('cycles','Number of cycles',1,20)}${setField('daysPerCycle','Working days per cycle',1,12)}${setField('passScore','Gate pass score (1 to 4)',2,4)}${setField('supervisedGateCycle','Supervised practice unlocks after gates through cycle',0,20)}${setField('urgentGateCycle','Same, Urgent pathway',0,20)}${setField('maxUploadMb','Largest upload (MB)',1,25)}</div>
+    <div class="kv"><h4>Phases</h4>${PH.map((p,i)=>`<div class="resrow" style="grid-template-columns:2fr 1fr 1fr auto"><input type="text" aria-label="Phase name" value="${esc(p.name)}" data-ph="${i}" data-pf="name"><input type="number" aria-label="From cycle" value="${esc(p.from)}" data-ph="${i}" data-pf="from"><input type="number" aria-label="To cycle" value="${esc(p.to)}" data-ph="${i}" data-pf="to"><button class="btn ghost small" data-act="ph-del" data-i="${i}">Remove</button></div>`).join('')}<div class="row"><button class="btn ghost small" data-act="ph-add">Add phase</button></div></div>
+    <div class="row"><button class="btn" data-act="settings-save">Save settings</button></div></section>
+  <p class="${total===100?'muted':'chip warn'}" style="margin:0 0 12px">Topic weights add up to ${total}%${total===100?'':'. They should total 100%.'}</p>
+  ${D.topics.map(tp=>{
+    const ts=D.tasks.filter(t=>t.topic===tp.id),editing=UI.editTopic===tp.id;
+    return`<section class="topic"><div class="th"><h3>${tp.id}. ${esc(tp.name)}</h3><span class="muted">${tp.w}% weight</span></div>
+    ${tp.note?`<div class="note amber"><b>Open notes</b>\n${esc(tp.note)}</div>`:''}
+    ${editing?`<div class="taskform"><div class="formgrid"><div class="field"><label for="tp-name">Topic name</label><input type="text" id="tp-name" data-tpf="name" value="${esc(UI.tpf.name)}"></div><div class="field"><label for="tp-w">Weight %</label><input type="number" id="tp-w" min="0" max="100" step="0.5" data-tpf="w" value="${esc(UI.tpf.w)}"></div></div><div class="field"><label for="tp-note">Internal notes (staff only)</label><textarea id="tp-note" data-tpf="note">${esc(UI.tpf.note)}</textarea></div><div class="row"><button class="btn small" data-act="topic-save">Save topic</button><button class="btn ghost small" data-act="topic-cancel">Cancel</button></div></div>`:`<div class="row"><button class="btn ghost small" data-act="topic-edit" data-id="${tp.id}">Edit topic</button></div>`}
+    ${resEditor(tp.id,'')}
+    <ul class="tasklist">${ts.map(t=>`<li class="${t.active?'':'off'}"><span class="tid">${esc(t.id)}</span><span class="grow">${esc(t.name)}</span><span class="hint">Cycle ${t.cycle}, ${esc((t.type||'').toLowerCase())}, weight ${t.weight}</span>${t.gate?'<span class="pill gate">Critical gate</span>':''}${t.active?'':'<span class="pill">Archived</span>'}
+      <button class="btn ghost small" data-act="task-edit" data-id="${esc(t.id)}">Edit</button>${t.active?`<button class="btn ghost small" data-act="task-archive" data-id="${esc(t.id)}">Archive</button>`:`<button class="btn ghost small" data-act="task-restore" data-id="${esc(t.id)}">Restore</button>`}</li>${UI.editTask===t.id?`<li style="display:block">${taskForm()}</li>`:''}`).join('')}
+      ${UI.editTask==='new:'+tp.id?`<li style="display:block">${taskForm()}</li>`:''}</ul>
+    <div class="row"><button class="btn ghost small" data-act="task-new" data-topic="${tp.id}">Add a task</button></div></section>`}).join('')}
+  ${UI.editTopic==='new'?`<section class="topic"><h3>New topic</h3><div class="taskform"><div class="formgrid"><div class="field"><label for="tp-name">Topic name</label><input type="text" id="tp-name" data-tpf="name" value="${esc(UI.tpf.name)}"></div><div class="field"><label for="tp-w">Weight %</label><input type="number" id="tp-w" min="0" max="100" step="0.5" data-tpf="w" value="${esc(UI.tpf.w)}"></div></div><div class="field"><label for="tp-note">Internal notes (staff only)</label><textarea id="tp-note" data-tpf="note">${esc(UI.tpf.note)}</textarea></div><div class="row"><button class="btn small" data-act="topic-save">Save topic</button><button class="btn ghost small" data-act="topic-cancel">Cancel</button></div></div></section>`:`<div class="row"><button class="btn ghost" data-act="topic-new">Add a topic</button></div>`}`;
+}
+
+/* ---------- guide ---------- */
+function vGuide(){
+  const c=D.config;
+  return`<div class="guide"><h1 style="margin-top:20px">How this programme works</h1>
+  <p class="muted">Finishing the tasks is not the aim. The aim is to show, to people who watch you work, that you are ready to work safely with students.</p>
+  <section><h2>The shape of it</h2><p>${c.cycles} cycles of ${c.daysPerCycle} working days (Sundays are not counted), so up to ${c.cycles*c.daysPerCycle} working days. That is the longest it should take. You can move faster if the work is ready.</p></section>
+  <section><h2>Two numbers, and a gate</h2><dl><dt>Training completion</dt><dd>How much of the programme an assessor has marked Complete, weighted by topic. Partial counts half.</dd><dt>Competency</dt><dd>How well you did, as an average of assessed scores.</dd><dt>Critical gates</dt><dd>Safety-critical tasks such as confidentiality, escalation, boundaries, referral, documentation and basic counselling skills. Each needs Complete with a score of ${c.passScore} or more. A high percentage cannot make up for a gate that is not passed.</dd></dl></section>
+  <section><h2>Scores</h2><dl>${[1,2,3,4].map(s=>`<dt>${s}</dt><dd>${SCALE[s]}</dd>`).join('')}</dl></section>
+  <section><h2>What an assessor can decide</h2><dl>${Object.keys(OUTCOME).map(k=>`<dt>${OUTCOME[k][0]}</dt><dd>${OUTCOME[k][1]}.</dd>`).join('')}</dl></section>
+  <section><h2>Readiness</h2><dl><dt>${LEVEL.notcleared}</dt><dd>You are learning and practising. No cases on your own.</dd><dt>${LEVEL.supervised}</dt><dd>You can take cases with a supervisor. The TL confirms this once the critical gates through cycle ${c.supervisedGateCycle} are passed.</dd><dt>${LEVEL.independent}</dt><dd>Every critical gate is passed and the Principal has signed off.</dd></dl></section>
+  <section><h2>Who does what</h2><dl><dt>Trainee</dt><dd>Does the tasks and adds evidence.</dd><dt>Team Leader</dt><dd>Main assessor. Observes, gives feedback and recommends readiness.</dd><dt>Principal</dt><dd>Signs off institutional readiness after reviewing the competency summary, the gates and the TL's recommendation.</dd></dl></section>
+  <section><h2>Evidence</h2><p>Tasks that are watched live (role plays, vivas, observed sessions) are assessed by the assessor on the spot, so you may have nothing to upload. Where you do add evidence, keep students anonymous: use initials or a reference, never full names or case detail. Recording sessions is never required by default and only happens where consent and privacy rules allow.</p></section>
+  <section><h2>Other pathways</h2><dl><dt>Experienced hire</dt><dd>Your assessor can mark non-gate tasks Exempt where you have already shown the skill. Gates are always assessed.</dd><dt>Urgent hire</dt><dd>The safety gates come first (through cycle ${c.urgentGateCycle}). Supervised cases can start while the rest of the training continues. Urgency never grants independent clearance.</dd></dl></section></div>`;
+}
+
+/* ---------- CSV export ---------- */
+function csvCell(v){v=String(v==null?'':v);return/[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function download(name,rows){
+  const text='﻿'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'}));a.download=name;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
+function exportTracker(tr){
+  const rows=[['Cycle','Phase','Topic','Task ID','Task','Type','Critical gate','Status','Score /4','Assessed by','Date assessed','Feedback','Evidence link','Files']];
+  D.tasks.filter(t=>t.active).forEach(t=>{const p=P(tr,t.id);rows.push(['C'+t.cycle,phaseOf(t.cycle),topicOf(t.topic).name,t.id,t.name,t.type,t.gate?'Yes':'No',STATUS[p.status],p.score||'',p.assessor||'',p.date||'',p.feedback||'',p.evidence||'',(p.files||[]).map(f=>f.name).join('; ')])});
+  download('tracker-'+tr.name.replace(/\W+/g,'-')+'.csv',rows);
+}
+function exportTeam(){
+  const rows=[['Trainee','Email','Pathway','Started','Assessors','Current cycle','Behind (cycles)','Completion %','Competency %','Gates passed','Gates total','Readiness','Reviews waiting','Active']];
+  D.trainees.forEach(tr=>{const s=tr.stats;rows.push([tr.name,tr.id,tr.pathway,tr.start,tr.assessorNames.join('; '),s.current,Math.max(0,s.behind),s.completion,s.competency==null?'':s.competency,s.gatesPassed,s.gatesTotal,LEVEL[s.effective],s.pending,tr.active?'Yes':'No'])});
+  download('team-summary.csv',rows);
+}
+
+/* ---------- events ---------- */
+const readB64=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(new Error('Could not read that file.'));r.readAsDataURL(f)});
+async function openFile(trId,taskId,fid){
+  try{toast('Opening file…');const f=await call('getEvidenceFile',trId,taskId,fid);
+    const bin=atob(f.data),u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([u8],{type:f.mime}));a.download=f.name;a.target='_blank';
+    document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast('Downloaded '+f.name);
+  }catch(e){toast((e&&e.message)||String(e),true)}
+}
+const checked=n=>Array.from(document.querySelectorAll(`input[name="${n}"]:checked`)).map(x=>x.value);
+const val=id=>{const e=document.getElementById(id);return e?e.value:''};
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  if(a==='archived'){UI.archived=b.checked;render();return}
+  if(b.tagName!=='BUTTON')return;
+  const ds=b.dataset,form=b.closest('.myform')||b.closest('.assessform');
+  switch(a){
+    case'view':UI.view=ds.v;UI.cycle=null;render();break;
+    case'cycle':UI.cycle=+ds.c;render();break;
+    case'open':UI.tid=ds.id;UI.view='trainee';UI.cycle=null;render();break;
+    case'export-tracker':exportTracker(T(UI.tid));break;
+    case'export-team':exportTeam();break;
+    case'save':case'submit':{
+      const id=form.dataset.t,ev=$('[data-f=evidence]',form).value,rf=$('[data-f=reflection]',form).value;
+      if(a==='submit'&&!ev.trim()&&!(P(T(UI.tid),id).files||[]).length){toast('Add a link, reference or file as evidence before submitting.',true);return}
+      openSet.add(UI.tid+'|'+id);
+      run('saveMyTask',[id,a,ev,rf],a==='submit'?'Submitted for review':'Draft saved',null,()=>{delete DRAFT[dk(UI.tid,id,'evidence')];delete DRAFT[dk(UI.tid,id,'reflection')]});break}
+    case'rmfile':openSet.add(UI.tid+'|'+ds.t);run('removeEvidence',[ds.t,ds.fid],'File removed');break;
+    case'openfile':openFile(ds.tr,ds.t,ds.fid);break;
+    case'assess':{
+      const tr=form.dataset.tr,id=form.dataset.t,oc=$('input[data-f=outcome]:checked',form),sc=$('input[data-f=score]:checked',form);
+      if(!oc){toast('Choose an outcome.',true);return}
+      openSet.add(tr+'|'+id);
+      run('assessTask',[tr,id,oc.value,sc?+sc.value:'',$('[data-f=feedback]',form).value],'Assessment saved',null,()=>['outcome','score','feedback'].forEach(f=>delete DRAFT[dk(tr,id,f)]));break}
+    case'ready':run('confirmReadiness',[UI.tid,ds.lv,val('rd-note')],ds.lv==='notcleared'?'Clearance withdrawn':'Readiness confirmed');break;
+    case'enrol':run('enrolTrainee',[val('nt-name'),val('nt-email'),checked('nt-as'),val('nt-path'),val('nt-start')],'Trainee enrolled');break;
+    case'edit-trainee':UI.editTrainee=ds.id;render();{const p=document.getElementById('et');if(p)p.scrollIntoView({block:'center'})}break;
+    case'trainee-cancel':UI.editTrainee=null;render();break;
+    case'trainee-save':run('updateTrainee',[UI.editTrainee,{name:val('et-name'),start:val('et-start'),pathway:val('et-path'),assessors:checked('et-as'),active:document.getElementById('et-active').checked}],'Saved',null,()=>{UI.editTrainee=null});break;
+    case'staff-add':run('saveStaff',[val('sf-email'),val('sf-name'),val('sf-role')],'Staff member saved');break;
+    case'staff-remove':if(confirm('Remove '+ds.email+' from the staff list?'))run('removeStaff',[ds.email],'Removed');break;
+    case'log':call('getActivityLog').then(l=>{UI.log=l;render()}).catch(er=>toast(er.message,true));break;
+    case'ph-add':PH.push({name:'',from:1,to:D.config.cycles});render();break;
+    case'ph-del':PH.splice(+ds.i,1);render();break;
+    case'settings-save':run('saveSettings',[SET,PH],'Settings saved',null,()=>{SET=null;PH=null});break;
+    case'topic-edit':{const t=D.topics.find(x=>x.id===+ds.id);UI.editTopic=t.id;UI.tpf={id:t.id,name:t.name,w:t.w,note:t.note};render();break}
+    case'topic-new':UI.editTopic='new';UI.tpf={name:'',w:0,note:''};render();break;
+    case'topic-cancel':UI.editTopic=null;render();break;
+    case'topic-save':run('saveTopic',[Object.assign({},UI.tpf,{id:UI.editTopic==='new'?'':UI.editTopic})],'Topic saved',null,()=>{UI.editTopic=null});break;
+    case'task-edit':{const t=D.tasks.find(x=>x.id===ds.id);UI.editTask=t.id;UI.tf=Object.assign({},t);render();break}
+    case'task-new':{const tp=+ds.topic,ns=D.tasks.filter(t=>t.topic===tp).map(t=>+String(t.id).split('.')[1]||0);
+      UI.editTask='new:'+tp;UI.tf={id:tp+'.'+((ns.length?Math.max(...ns):0)+1),name:'',topic:tp,cycle:1,type:D.config.taskTypes[1],weight:1,gate:false,what:'',standard:'',evidence:''};render();break}
+    case'task-cancel':UI.editTask=null;UI.tf=null;render();break;
+    case'task-save':{const isNew=UI.editTask.startsWith('new:');run('saveTask',[UI.tf,isNew],'Task saved',null,()=>{UI.editTask=null;UI.tf=null});break}
+    case'task-archive':run('setTaskActive',[ds.id,false],'Task archived');break;
+    case'task-restore':run('setTaskActive',[ds.id,true],'Task restored');break;
+    case'res-add':RES[ds.scope].push({label:'',url:'',note:''});render();break;
+    case'res-del':RES[ds.scope].splice(+ds.i,1);render();break;
+    case'res-save':run('saveResources',[+ds.topic,ds.task,RES[ds.scope]],'Resources saved',null,()=>{delete RES[ds.scope]});break;
+  }
+});
+
+document.addEventListener('input',e=>{
+  const el=e.target,ds=el.dataset;
+  if(ds.f){const box=el.closest('.myform')||el.closest('.assessform');if(box&&(ds.f==='evidence'||ds.f==='reflection'||ds.f==='feedback'))DRAFT[dk(box.dataset.tr,box.dataset.t,ds.f)]=el.value}
+  if(ds.set!=null)SET[ds.set]=el.value;
+  if(ds.ph!=null)PH[+ds.ph][ds.pf]=el.value;
+  if(ds.tpf)UI.tpf[ds.tpf]=el.value;
+  if(ds.tf)UI.tf[ds.tf]=el.type==='checkbox'?el.checked:(['topic','cycle'].includes(ds.tf)?+el.value:el.value);
+  if(ds.rs)RES[ds.rs][+ds.i][ds.rf]=el.value;
+});
+
+document.addEventListener('change',async e=>{
+  const el=e.target,ds=el.dataset;
+  if(ds.act==='pick'){UI.tid=el.value;UI.cycle=null;render();return}
+  if(ds.f==='outcome'||ds.f==='score'){
+    const box=el.closest('.assessform');DRAFT[dk(box.dataset.tr,box.dataset.t,ds.f)]=el.value;
+    if(ds.f==='score'){ // sensible default outcome, never overriding a deliberate choice
+      const cur=$('input[data-f=outcome]:checked',box),s=+el.value,low=box.dataset.gate==='true'&&s<D.config.passScore;
+      const want=low?'rework':(s>=2?'complete':'rework');
+      if(!cur||(cur.value==='complete'&&low)){const r=$(`input[data-f=outcome][value=${want}]`,box);if(r){r.checked=true;DRAFT[dk(box.dataset.tr,box.dataset.t,'outcome')]=want}}
+    }
+    return;
+  }
+  if(ds.staffrole){run('saveStaff',[ds.staffrole,ds.name,el.value],'Role updated');return}
+  if(ds.up!=null){
+    const file=el.files[0];if(!file)return;
+    if(file.size>D.config.maxUploadMb*1048576){toast('That file is larger than '+D.config.maxUploadMb+' MB. Share a link instead.',true);el.value='';return}
+    try{const b64=await readB64(file);openSet.add(UI.tid+'|'+ds.up);run('uploadEvidence',[ds.up,file.name,file.type||'application/octet-stream',b64],'File attached','Uploading…')}
+    catch(er){toast(er.message,true)}
+  }
+});
+document.addEventListener('toggle',e=>{const d=e.target;if(d.matches&&d.matches('details[data-key]')){d.open?openSet.add(d.dataset.key):openSet.delete(d.dataset.key)}},true);
+
+render();
+call('getBootstrap').then(d=>{setData(d);render()}).catch(e=>{$('#app').innerHTML=`<div class="center"><h2>The app couldn't load</h2><p class="muted">${esc((e&&e.message)||e)}</p></div>`});
+</script>
