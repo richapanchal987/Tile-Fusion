@@ -6,7 +6,7 @@ const { makeWorld } = require('./fake-google');
 const dir = path.join(__dirname, '..', 'apps-script'), shots = path.join(__dirname, 'shots');
 fs.mkdirSync(shots, { recursive: true });
 const read = f => fs.readFileSync(path.join(dir, f), 'utf8');
-const HTML = read('Index.html').replace("<?!= include_('Styles') ?>", read('Styles.html')).replace("<?!= include_('App') ?>", read('App.html'))
+const HTML = read('Index.html').replace("<?!= include_('Styles') ?>", read('Styles.html')).replace("<?!= include_('Art') ?>", read('Art.html')).replace("<?!= include_('App') ?>", read('App.html'))
   .replace(/<link[^>]*fonts\.[^>]*>/g, '');
 const ADMIN = 'richa.panchal@fsksurat.in', W = makeWorld();
 W.as(ADMIN); W.api.setup();
@@ -19,11 +19,11 @@ W.as('asha@fsksurat.in'); W.call('uploadEvidence', ['2.4', 'decisions.pdf', 'app
 W.call('saveMyTask', ['2.4', 'submit', '', '']);
 
 let failures = 0;
-const step = async (name, fn) => { try { await fn(); console.log('ok  ' + name); } catch (e) { failures++; console.log('FAIL ' + name + '\n   ' + (e.message || e).split('\n')[0]); } };
+const step = async (name, fn) => { try { await fn(); console.log('ok  ' + name); } catch (e) { failures++; console.log('FAIL ' + name + '\n   ' + (process.env.FULL ? (e.stack || e.message) : (e.message || e).split('\n')[0])); } };
 
 async function open(browser, email, opts) {
   W.as(email);
-  const ctx = await browser.newContext(Object.assign({ viewport: { width: 1280, height: 900 } }, opts));
+  const ctx = (opts && opts.reuse) || await browser.newContext(Object.assign({ viewport: { width: 1280, height: 900 } }, opts));
   ctx.setDefaultTimeout(6000); const page = await ctx.newPage(); page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' && !/fonts|favicon/i.test(m.text())) page.errors.push(m.text()); });
   await page.exposeFunction('__srv', async (fn, args) => { W.as(email); try { return { ok: W.call(fn, args) }; } catch (e) { return { error: String(e.message || e).replace(/^Error: /, '') }; } });
@@ -178,6 +178,34 @@ async function open(browser, email, opts) {
     assert.strictEqual(await row('sample.png').locator('img.vimg').count(), 0);
     await p.screenshot({ path: path.join(shots, '8-evidence-viewer.png'), fullPage: true });
     assert.deepStrictEqual(p.errors, []); await p.context().close();
+  });
+
+  await step('delight: growth plant, "since you last visited" card, confetti on Complete, calm for reduced motion', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    let p = await open(browser, 'bina@fsksurat.in', { reuse: ctx });                       // first visit: nothing to compare with
+    assert.strictEqual(await p.locator('.changes').count(), 0, 'no card on a first visit');
+    assert.ok((await p.locator('svg.plant').getAttribute('aria-label')).startsWith('Growth: '));
+    assert.strictEqual(await p.locator('canvas.confetti').count(), 0);
+    W.as(ADMIN); W.call('assessTask', ['bina@fsksurat.in', '1.4', 'complete', 3, 'Clear and honest statement.']);
+    W.call('assessTask', ['bina@fsksurat.in', '1.1', 'rework', 2, 'Add the Principal to your role map.']);
+    p = await open(browser, 'bina@fsksurat.in', { reuse: ctx });                           // second visit: sees what changed
+    const card = p.locator('.changes'); assert.strictEqual(await card.count(), 1);
+    const text = await card.innerText();
+    assert.ok(text.includes('1.4 Professional Practice Statement') && text.includes('marked complete'), 'complete is reported');
+    assert.ok(text.includes('1.1 Role Mapping') && text.includes('another attempt') && text.includes('Add the Principal'), 'rework is reported with its feedback');
+    await p.waitForSelector('canvas.confetti');                                            // celebration for the Complete
+    await p.waitForSelector('canvas.confetti', { state: 'detached', timeout: 6000 });      // and it cleans up after itself
+    await card.locator('[data-act=dismiss-changes]').click(); assert.strictEqual(await p.locator('.changes').count(), 0);
+    assert.deepStrictEqual(p.errors, []); await ctx.close();
+    // someone who has asked for less motion gets the information but no animation
+    const calm = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
+    p = await open(browser, 'bina@fsksurat.in', { reuse: calm });
+    W.as(ADMIN); W.call('assessTask', ['bina@fsksurat.in', '1.2', 'complete', 4, 'Even better.']);
+    p = await open(browser, 'bina@fsksurat.in', { reuse: calm });
+    assert.strictEqual(await p.locator('.changes').count(), 1);
+    await p.waitForTimeout(500); assert.strictEqual(await p.locator('canvas.confetti').count(), 0, 'no confetti with reduced motion');
+    assert.strictEqual(await p.locator('.plant .sway').evaluate(e => getComputedStyle(e).animationName), 'none', 'the plant does not sway');
+    await calm.close();
   });
 
   await step('admin: team table, enrol a trainee, add staff', async () => {

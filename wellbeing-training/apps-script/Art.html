@@ -1,0 +1,81 @@
+<script>
+/* Illustrations and motion. Everything is drawn in code, uses theme colours only (so it works in light and dark mode),
+   and is skipped for people who have asked their device for reduced motion. */
+const REDUCED=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const ICON={
+  book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  flag:'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+  shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  check:'<polyline points="20 6 9 17 4 12"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  refresh:'<polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/>',
+  spark:'<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/>',
+  inbox:'<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  alert:'<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  star:'<polygon points="12 2 15.1 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 8.9 8.3 12 2"/>'
+};
+const ico=(n,sz)=>`<svg class="ic" viewBox="0 0 24 24" width="${sz||18}" height="${sz||18}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]||''}</svg>`;
+const TYPE_ICON={'Learning exposure':'book','Practice':'target','Demonstration':'eye','Final verification':'flag'};
+const STATUS_ICON={progress:'clock',submitted:'inbox',complete:'check',exempt:'check',partial:'spark',rework:'refresh'};
+const LOGO='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V11"/><path d="M12 11C12 7 9 5 5 5c0 4 2 6 7 6z"/><path d="M12 13c0-3 2-5 6-5 0 3-2 5-6 5z"/></svg>';
+
+/* ---- the plant that grows with completion ---- */
+const STAGES=['Seed','Sprout','Sapling','Growing tree','In bloom'];
+const stageOf=pct=>pct<10?0:pct<30?1:pct<55?2:pct<80?3:4;
+function plantSvg(stage){
+  const base=192,h=[0,44,76,106,122][stage],top=base-h;let n=0;
+  const leaf=(y,side,sz,alt)=>`<g transform="translate(100 ${y}) rotate(${side>0?-32:32}) scale(${side>0?sz:-sz} ${sz})"><path class="leaf${alt?' b':''}" style="--i:${n++}" d="M0 0C12-11 30-9 36 0C30 9 12 11 0 0Z"/></g>`;
+  const flower=(x,y,r,alt)=>{let p='';for(let k=0;k<5;k++)p+=`<g transform="rotate(${k*72})"><ellipse class="petal${alt?' b':''}" style="--i:${n++}" cx="0" cy="${-r*.95}" rx="${r*.5}" ry="${r*.8}"/></g>`;return`<g transform="translate(${x} ${y})">${p}<circle class="core${alt?' b':''}" style="--i:${n++}" r="${r*.45}"/></g>`};
+  let body='';
+  if(stage===0){body='<ellipse class="seed" cx="100" cy="186" rx="9" ry="6"/>'}
+  else{
+    body=`<path class="stem" stroke-width="6" d="M100 ${base}C96 ${base-h*.35} 104 ${base-h*.7} 100 ${top}"/>`;
+    if(stage===1)body+=leaf(top+4,1,.6)+leaf(top+4,-1,.6,1);
+    if(stage===2)body+=leaf(top+34,1,.72)+leaf(top+34,-1,.72,1)+leaf(top+6,1,.62,1)+leaf(top+6,-1,.62);
+    if(stage>=3){const s=stage===3?.85:.95;body+=leaf(top+62,1,s)+leaf(top+62,-1,s,1)+leaf(top+36,-1,s)+leaf(top+36,1,s,1)+leaf(top+10,1,s*.9)+leaf(top+10,-1,s*.9,1)}
+    if(stage===4)body+=`<path class="stem" stroke-width="3" d="M100 ${top+44}Q80 ${top+38} 68 ${top+22}"/><path class="stem" stroke-width="3" d="M100 ${top+50}Q122 ${top+44} 132 ${top+30}"/>`+flower(100,top-6,13)+flower(68,top+20,9,1)+flower(132,top+28,10);
+  }
+  return`<svg class="plant" viewBox="0 0 200 224" role="img" aria-label="Growth: ${STAGES[stage]}"><path class="pot" d="M62 196h76l-9 24H71z"/><ellipse class="soil" cx="100" cy="196" rx="40" ry="8"/><g class="sway" style="transform-origin:100px 192px">${body}</g></svg>`;
+}
+
+/* ---- soft clouds and sun behind the hero ---- */
+const HERO_BG='<svg class="hero-bg" viewBox="0 0 800 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><circle class="sun" cx="455" cy="46" r="17"/>'
+ +'<g class="cloud"><ellipse cx="90" cy="48" rx="46" ry="13"/><ellipse cx="120" cy="38" rx="30" ry="13"/><ellipse cx="68" cy="40" rx="26" ry="11"/></g>'
+ +'<g class="cloud c2"><ellipse cx="300" cy="150" rx="50" ry="14"/><ellipse cx="332" cy="140" rx="32" ry="14"/><ellipse cx="276" cy="142" rx="28" ry="12"/></g>'
+ +'<g class="cloud c3"><ellipse cx="520" cy="210" rx="44" ry="12"/><ellipse cx="548" cy="201" rx="28" ry="12"/></g></svg>';
+
+/* ---- friendly empty states ---- */
+function emptyArt(kind){
+  const icon={
+    reviews:'<rect x="62" y="34" width="56" height="70" rx="9" class="line"/><path class="line" d="M78 34v-6h24v6"/><polyline class="line draw" points="76 70 86 80 106 58"/>',
+    seed:'<path class="line" d="M90 104V62"/><path class="line draw" d="M90 74C70 74 62 62 62 48C80 48 90 58 90 74Z"/><path class="line draw" d="M90 66C90 54 100 44 116 44C116 58 106 66 90 66Z"/>',
+    lock:'<rect x="64" y="62" width="52" height="40" rx="9" class="line"/><path class="line" d="M74 62V50a16 16 0 0 1 32 0v12"/><circle cx="90" cy="82" r="4" class="line"/>'
+  }[kind]||'';
+  return`<svg class="ea" viewBox="0 0 180 130" aria-hidden="true"><ellipse class="blob" cx="90" cy="68" rx="76" ry="54"/><g class="floaty">${icon}</g><circle class="acc" cx="26" cy="30" r="6"/><circle class="acc" cx="156" cy="40" r="4"/><circle class="acc" cx="146" cy="104" r="5"/></svg>`;
+}
+
+/* ---- confetti: a short burst, no library ---- */
+function celebrate(big){
+  if(REDUCED)return;
+  const c=document.createElement('canvas'),W=window.innerWidth,H=window.innerHeight;c.className='confetti';c.width=W;c.height=H;c.setAttribute('aria-hidden','true');document.body.appendChild(c);
+  const g=c.getContext('2d'),cols=['#1F5E5A','#3B5BA5','#E3AE55','#7A4A8C','#2B6F48','#E68C80','#7CC4BA'],n=big?150:80,t0=performance.now(),life=big?3200:2400;
+  const ps=Array.from({length:n},()=>({x:W*(.25+Math.random()*.5),y:H*.32,vx:(Math.random()-.5)*10,vy:-Math.random()*12-4,s:5+Math.random()*6,r:Math.random()*6,vr:(Math.random()-.5)*.3,c:cols[Math.random()*cols.length|0]}));
+  (function f(t){const dt=t-t0;g.clearRect(0,0,W,H);
+    ps.forEach(p=>{p.vy+=.28;p.x+=p.vx;p.y+=p.vy;p.vx*=.995;p.r+=p.vr;g.save();g.translate(p.x,p.y);g.rotate(p.r);g.fillStyle=p.c;g.globalAlpha=Math.max(0,1-dt/life);g.fillRect(-p.s/2,-p.s/3,p.s,p.s*.6);g.restore()});
+    if(dt<life)requestAnimationFrame(f);else c.remove()})(t0);
+}
+
+/* ---- numbers that count up the first time a screen appears ---- */
+function countUp(){
+  document.querySelectorAll('[data-count]').forEach(el=>{
+    const to=+el.dataset.count,suf=el.dataset.suffix||'';if(REDUCED||!isFinite(to)){el.textContent=to+suf;return}
+    const t0=performance.now();el.textContent='0'+suf;
+    (function f(t){const k=Math.min(1,(t-t0)/800);el.textContent=Math.round(to*(1-Math.pow(1-k,3)))+suf;if(k<1)requestAnimationFrame(f)})(t0);
+  });
+}
+const greeting=()=>{const h=new Date().getHours();return h<12?'Good morning':h<17?'Good afternoon':'Good evening'};
+</script>

@@ -5,7 +5,7 @@ const STATUS={not:'Not started',progress:'In progress',submitted:'Awaiting revie
 const OUTCOME={complete:['Complete','Meets the standard'],partial:['Partial','Some is there; say what is missing'],rework:['Rework','Not yet; trainee redoes and resubmits'],exempt:['Exempt','Not needed, for example prior experience']};
 const LEVEL={notcleared:'Not cleared for cases',supervised:'Cleared for supervised practice',independent:'Cleared for independent cases'};
 const RANK={notcleared:0,supervised:1,independent:2};
-let D=null,busy=false,SET=null,PH=null;
+let D=null,busy=false,SET=null,PH=null,CHANGES=null;
 const UI={view:null,tid:null,cycle:null,rvFilter:null,editTrainee:null,editTopic:null,tpf:null,editTask:null,tf:null,archived:false,log:null};
 const openSet=new Set(),DRAFT={},RES={};
 const FILES={},VIEWING=new Set(); // downloaded evidence (kept so a viewer survives a re-render) and which viewers are open
@@ -27,6 +27,8 @@ const fmtShort=d=>{try{return new Date(d+'T00:00').toLocaleDateString('en-GB',{d
 const mb=n=>n<1024?n+' B':n<1048576?Math.round(n/1024)+' KB':(n/1048576).toFixed(1)+' MB';
 const dk=(tid,task,f)=>tid+'|'+task+'|'+f;
 const dv=(tid,task,f,fb)=>{const k=dk(tid,task,f);return k in DRAFT?DRAFT[k]:fb};
+const phaseIdx=c=>{const i=D.config.phases.findIndex(p=>c>=p.from&&c<=p.to);return(i<0?0:i)%4};
+const pcv=c=>`--pc:var(--p${phaseIdx(c)+1})`;
 const resFor=t=>D.res.filter(r=>r.task===t.id).concat(D.res.filter(r=>r.topic===t.topic&&!r.task));
 
 function call(fn,...args){return new Promise((res,rej)=>google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args))}
@@ -49,22 +51,45 @@ async function run(fn,args,ok,start,after){
 /* ---------- shell ---------- */
 function render(){
   const app=$('#app');
-  if(!D){app.innerHTML='<div class="center"><h2>Loading your training</h2><p class="muted">One moment.</p></div>';return}
-  if(D.me.role==='None'){app.innerHTML=`<div class="center"><h1>You're not enrolled yet</h1><p class="muted">You're signed in as ${esc(D.me.email||'an unknown account')}. Ask the Well-being TL to enrol you, then reload this page.</p></div>`;return}
+  if(!D){app.innerHTML=`<div class="center">${emptyArt('seed')}<h2>Loading your training</h2><p class="muted">One moment.</p></div>`;return}
+  if(D.me.role==='None'){app.innerHTML=`<div class="center">${emptyArt('lock')}<h1>You're not enrolled yet</h1><p class="muted">You're signed in as ${esc(D.me.email||'an unknown account')}. Ask the Well-being TL to enrol you, then reload this page.</p></div>`;return}
   const staff=isStaff(),pend=staff?pendingTotal():0;
   const tabs=staff?[['review','Reviews'],['trainee','Trainee'],['team','Team']].concat(isAdmin()?[['curriculum','Curriculum']]:[]).concat([['guide','Guide']]):[['trainee','My training'],['guide','Guide']];
   const v=UI.view;
   const act=D.trainees.filter(t=>t.active);
   app.innerHTML=`
   <header class="top"><div class="top-in">
-    <div class="brand">${esc(D.config.appName)}<small>${esc(D.config.orgName)}</small></div>
+    <div class="brand"><span class="logo">${LOGO}</span><span>${esc(D.config.appName)}<small>${esc(D.config.orgName)}</small></span></div>
     <nav class="tabs" aria-label="Sections">${tabs.map(([k,l])=>`<button class="tab" data-act="view" data-v="${k}" ${v===k?'aria-current="page"':''}>${l}${k==='review'&&pend?`<span class="count">${pend}</span>`:''}</button>`).join('')}</nav>
     <span class="who-chip">${esc(D.me.name||D.me.email)}, ${D.me.role==='Admin'?'admin':D.me.role==='Assessor'?'assessor':'trainee'}</span>
   </div></header>
   ${v==='trainee'&&staff&&act.length?`<div class="proto"><label>Trainee <select data-act="pick" aria-label="Choose trainee">${act.map(t=>`<option value="${esc(t.id)}" ${t.id===UI.tid?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label><span>You're viewing their training. Only they can submit work; you can record assessments.</span></div>`:''}
   <main>${v==='trainee'?vTrainee():v==='review'?vReview():v==='team'?vTeam():v==='curriculum'?vCurriculum():vGuide()}</main>`;
   mountViewers();
+  if(!UI.introDone){UI.introDone=true;document.body.classList.add('intro');countUp();setTimeout(()=>document.body.classList.remove('intro'),1700)}
 }
+
+/* ---------- since you last visited, and celebrations ---------- */
+function detectChanges(){
+  if(!D||D.me.role!=='Trainee'||!D.trainees[0])return;
+  const tr=D.trainees[0],key='wb:seen:'+D.me.email,now={s:{},lv:tr.stats.effective};let prev=null;
+  try{prev=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
+  D.tasks.forEach(t=>{if(t.active)now.s[t.id]=P(tr,t.id).status});
+  try{localStorage.setItem(key,JSON.stringify(now))}catch(e){}
+  if(!prev)return;   // first visit on this device: nothing to compare with
+  const ch=[];let party=false,big=false;
+  D.tasks.forEach(t=>{
+    if(!t.active)return;const a=prev.s[t.id]||'not',b=now.s[t.id];if(a===b)return;
+    const p=P(tr,t.id),name=`<b>${esc(t.id)} ${esc(t.name)}</b>`,fb=p.feedback?` &ldquo;${esc(p.feedback.slice(0,140))}${p.feedback.length>140?'…':''}&rdquo;`:'';
+    if(b==='complete'||b==='exempt'){ch.push({k:'good',i:'check',h:`${name} was marked ${STATUS[b].toLowerCase()}${p.score?' ('+p.score+' of 4)':''}.${fb}`});party=true}
+    else if(b==='partial')ch.push({k:'warn',i:'spark',h:`${name} needs a little more work.${fb}`});
+    else if(b==='rework')ch.push({k:'bad',i:'refresh',h:`${name} needs another attempt.${fb}`});
+  });
+  if(RANK[now.lv]>RANK[prev.lv||'notcleared']){ch.unshift({k:'star',i:'star',h:`You're now <b>${LEVEL[now.lv].toLowerCase()}</b>.`});big=true}
+  CHANGES=ch.length?ch:null;
+  if(big)celebrate(true);else if(party)celebrate(false);
+}
+const changesCard=()=>`<section class="changes" aria-label="Since you last visited"><div class="hd"><h3>${ico('spark')} Since you last visited</h3><button class="btn ghost small" data-act="dismiss-changes">Dismiss</button></div><ul>${CHANGES.map(c=>`<li class="${c.k}"><span class="badge">${ico(c.i,14)}</span><span>${c.h}</span></li>`).join('')}</ul></section>`;
 
 /* ---------- trainee view ---------- */
 function paceChip(tr){
@@ -103,38 +128,46 @@ function pathHtml(tr,cyc){
   const s=tr.stats,N=D.config.cycles,starts=new Set(D.config.phases.map(p=>p.from)),cal=tr.cal||[],sg=D.config.supervisedGateCycle;
   let h='';
   for(let c=1;c<=N;c++){
-    const f=s.fractions[c-1]||0,cd=cal[c-1],now=s.calendarState==='active'&&s.expected===c;
-    h+=`<button class="node ${c===1?'first':''} ${c===cyc?'sel':''} ${f>=1?'full':''} ${c>1&&(s.fractions[c-2]||0)>=1?'done':''}" data-act="cycle" data-c="${c}" aria-label="Cycle ${c}, ${Math.round(f*100)} percent done${cd?', '+fmtShort(cd.start)+' to '+fmtShort(cd.end):''}" aria-pressed="${c===cyc}" style="--f:${f*360}deg">
-      <span class="dot"><span>${c}</span></span><span class="cl">${starts.has(c)?esc(phaseShort(c)):''}</span><span class="cd">${cd?fmtShort(cd.start):''}</span><span class="now" ${now?'':'style="visibility:hidden"'}>Today</span></button>`;
-    if(c===sg&&sg>0&&sg<N)h+=`<div class="gatemark ${RANK[s.effective]>=1?'open':''}"><div class="bar"></div><span>Supervised practice</span></div>`;
-    if(c===N)h+=`<div class="gatemark ${s.effective==='independent'?'open':''}"><div class="bar"></div><span>Independent cases</span></div>`;
+    const f=s.fractions[c-1]||0,cd=cal[c-1],now=s.calendarState==='active'&&s.expected===c,here=!s.finished&&s.current===c;
+    h+=`<button class="node ${c===1?'first':''} ${c===cyc?'sel':''} ${f>=1?'full':''} ${here?'here':''} ${c>1&&(s.fractions[c-2]||0)>=1?'done':''}" data-act="cycle" data-c="${c}" aria-label="Cycle ${c}, ${Math.round(f*100)} percent done${cd?', '+fmtShort(cd.start)+' to '+fmtShort(cd.end):''}" aria-pressed="${c===cyc}" style="--f:${f*360}deg;${pcv(c)}">
+      <span class="dot"><span>${f>=1?ico('check',18):c}</span></span><span class="cl">${starts.has(c)?esc(phaseShort(c)):''}</span><span class="cd">${cd?fmtShort(cd.start):''}</span><span class="now" ${now?'':'style="visibility:hidden"'}>Today</span></button>`;
+    if(c===sg&&sg>0&&sg<N)h+=`<div class="gatemark ${RANK[s.effective]>=1?'open':''}"><div class="bar">${ico('shield',16)}</div><span>Supervised practice</span></div>`;
+    if(c===N)h+=`<div class="gatemark ${s.effective==='independent'?'open':''}"><div class="bar">${ico('flag',16)}</div><span>Independent cases</span></div>`;
   }
   return h;
 }
 
-function meter(l,v,h){return`<div class="meter"><div class="lab"><span>${l}</span><b>${v==null?'Not assessed yet':v+'%'}</b></div><div class="track"><i style="width:${v||0}%"></i></div><p class="hint">${h}</p></div>`}
+function meter(l,v,h){return`<div class="meter"><div class="lab"><span>${l}</span><b ${v==null?'':`data-count="${v}" data-suffix="%"`}>${v==null?'Not assessed yet':v+'%'}</b></div><div class="track"><i style="width:${v||0}%"></i></div><p class="hint">${h}</p></div>`}
+const nextUp=tr=>D.tasks.filter(t=>t.active&&!['complete','exempt','submitted'].includes(P(tr,t.id).status)).slice(0,3);
 
 function vTrainee(){
   const tr=T(UI.tid);
-  if(!tr)return`<div class="empty" style="margin-top:24px">No trainees enrolled yet.${isAdmin()?' Enrol one from the Team tab.':''}</div>`;
-  const s=tr.stats,cyc=UI.cycle||s.current,N=D.config.cycles,cd=(tr.cal||[])[cyc-1];
+  if(!tr)return`<div class="empty" style="margin-top:24px">${emptyArt('seed')}<h3>No trainees yet</h3><p>${isAdmin()?'Enrol one from the Team tab.':'A trainee will appear here once an admin enrols them.'}</p></div>`;
+  const s=tr.stats,cyc=UI.cycle||s.current,N=D.config.cycles,cd=(tr.cal||[])[cyc-1],st=stageOf(s.completion);
   const tasks=D.tasks.filter(t=>t.cycle===cyc&&t.active);
   const mine=D.me.role==='Trainee'&&tr.id===D.me.email;
+  const cycTasks=D.tasks.filter(t=>t.cycle===s.current&&t.active),cycDone=cycTasks.filter(t=>['complete','exempt'].includes(P(tr,t.id).status)).length;
+  const subj=mine?"You're":"They're",nu=nextUp(tr);
   return`
-  <section class="hero">
-    <div><h1>${esc(tr.name)}</h1>
-      <p class="meta">Started ${fmtDate(tr.start)}. ${tr.assessorNames.length?'Assessors: '+tr.assessorNames.map(esc).join(', ')+'.':'No assessor assigned yet.'}</p>
-      <div class="chips"><span class="chip">${esc(tr.pathway)} pathway</span>${paceChip(tr)}<span class="chip">Cycle ${s.current} of ${N}, ${esc(phaseShort(s.current))}</span></div>
-      <p class="row" style="margin-top:12px"><button class="btn ghost small" data-act="export-tracker">Download my tracker (CSV)</button></p></div>
+  <section class="hero2" style="${pcv(s.current)}">${HERO_BG}
+    <div>
+      <p class="eyebrow">${mine?greeting():'Trainee'}</p>
+      <h1>${esc(tr.name)}</h1>
+      <p class="hero-sub">${s.finished?`${mine?'You have':'They have'} worked through every cycle.`:`${subj} in cycle ${s.current}, ${esc(phaseShort(s.current))}: ${cycDone} of ${cycTasks.length} tasks complete.`}</p>
+      <div class="chips"><span class="chip">${esc(tr.pathway)} pathway</span>${paceChip(tr)}<span class="chip">Started ${fmtDate(tr.start)}</span><span class="chip">${tr.assessorNames.length?'Assessors: '+tr.assessorNames.map(esc).join(', '):'No assessor assigned yet'}</span></div>
+      <div class="hero-actions"><button class="btn ghost small" data-act="export-tracker">Download tracker (CSV)</button></div></div>
+    <div class="growth">${plantSvg(st)}<p class="cap">${STAGES[st]}</p><p class="sub">Grows as work is marked complete</p></div>
     ${readyCard(tr)}
   </section>
+  ${mine&&CHANGES?changesCard():''}
   <div class="pathwrap"><div class="path">${pathHtml(tr,cyc)}</div></div>
   <div class="cols">
-    <section><div class="sechead"><h2>Cycle ${cyc}</h2><span class="muted">${esc(phaseOf(cyc))}${cd?', '+fmtShort(cd.start)+' to '+fmtShort(cd.end):''}, ${tasks.length} task${tasks.length===1?'':'s'}</span></div>
+    <section><div class="sechead" style="${pcv(cyc)}"><h2>Cycle ${cyc}</h2><span class="muted">${esc(phaseOf(cyc))}${cd?', '+fmtShort(cd.start)+' to '+fmtShort(cd.end):''}, ${tasks.length} task${tasks.length===1?'':'s'}</span></div>
       ${tasks.map(t=>taskCard(tr,t,mine)).join('')||'<div class="empty">No tasks in this cycle.</div>'}</section>
     <aside>
       <div class="card">${meter('Training completion',s.completion,'Tasks an assessor has marked Complete, weighted by topic')}${meter('Competency',s.competency,'Average score of assessed tasks, weighted')}<p class="hint">A high percentage cannot make up for a critical gate that is not passed.</p></div>
-      <div class="card"><details ${openSet.has('gates')?'open':''} data-key="gates"><summary>Critical gates: ${s.gatesPassed} of ${s.gatesTotal}</summary><ul class="gl">${s.gates.map(g=>`<li class="${g.state}"><span class="ic" aria-hidden="true"></span><span>${esc(g.id)} ${esc(g.name)}<small>${g.state==='pass'?'Passed':g.state==='attention'?'Needs another attempt':'Cycle '+g.cycle}</small></span></li>`).join('')}</ul></details></div>
+      ${nu.length?`<div class="card"><h3>${ico('target')} Next up</h3><ul class="nextup">${nu.map(t=>`<li><button data-act="goto" data-c="${t.cycle}" data-t="${esc(t.id)}" style="${pcv(t.cycle)}">${ico(TYPE_ICON[t.type]||'target',18)}<b>${esc(t.id)} ${esc(t.name)}</b><small>Cycle ${t.cycle}${t.gate?', critical gate':''}</small></button></li>`).join('')}</ul></div>`:''}
+      <div class="card"><details ${openSet.has('gates')?'open':''} data-key="gates"><summary>Critical gates: ${s.gatesPassed} of ${s.gatesTotal}</summary><ul class="gl">${s.gates.map(g=>`<li class="${g.state}"><span class="ic2" aria-hidden="true"></span><span>${esc(g.id)} ${esc(g.name)}<small>${g.state==='pass'?'Passed':g.state==='attention'?'Needs another attempt':'Cycle '+g.cycle}</small></span></li>`).join('')}</ul></details></div>
     </aside>
   </div>`;
 }
@@ -170,10 +203,10 @@ function taskCard(tr,t,mine){
     block+=`<div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>${p.reflection?`<div class="kv"><h4>Reflection</h4><p>${esc(p.reflection)}</p></div>`:''}`;
   }
   if(staff)block+=assessForm(tr,t,p);
-  return`<details class="task" data-key="${esc(key)}" ${openSet.has(key)?'open':''}>
+  return`<details class="task" data-key="${esc(key)}" style="${pcv(t.cycle)}" ${openSet.has(key)?'open':''}>
     <summary><span class="tid">${esc(t.id)}</span><span class="tname">${esc(t.name)}</span>
-      <span class="pills">${t.gate?'<span class="pill gate">Critical gate</span>':''}<span class="pill s-${p.status}">${STATUS[p.status]}</span></span>
-      <span class="ttopic">${esc(topicOf(t.topic).name)}${t.type?', '+esc(t.type.toLowerCase()):''}</span></summary>
+      <span class="pills">${t.gate?`<span class="pill gate">${ico('shield',13)}Critical gate</span>`:''}<span class="pill s-${p.status}">${STATUS_ICON[p.status]?ico(STATUS_ICON[p.status],13):''}${STATUS[p.status]}</span></span>
+      <span class="ttopic">${ico(TYPE_ICON[t.type]||'target',15)}${esc(topicOf(t.topic).name)}${t.type?', '+esc(t.type.toLowerCase()):''}</span></summary>
     <div class="tbody">
       <div class="kv"><h4>What you'll do</h4><p>${esc(t.what)}</p></div>
       <div class="kv"><h4>What good looks like</h4><p>${esc(t.standard)}${t.gate?`\nCritical gate: needs Complete with a score of ${D.config.passScore} or more.`:''}</p></div>
@@ -200,32 +233,38 @@ function assessForm(tr,t,p){
 }
 
 const initials=n=>String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+function tilesHtml(list){return`<div class="tiles">${list.map(([ic,n,l,k])=>`<div class="tile ${k||''}"><span class="ti">${ico(ic,22)}</span><div><div class="tn" data-count="${n}">${n}</div><div class="tl">${l}</div></div></div>`).join('')}</div>`}
 function vReview(){
   const items=[];
   D.trainees.forEach(tr=>{if(tr.active)D.tasks.forEach(t=>{if(t.active&&P(tr,t.id).status==='submitted')items.push([tr,t,P(tr,t.id)])})});
   items.sort((a,b)=>String(a[2].submitted).localeCompare(String(b[2].submitted)));
   const by={};items.forEach(([tr])=>{(by[tr.id]=by[tr.id]||{tr:tr,n:0}).n++});
   const who=Object.values(by),f=UI.rvFilter&&by[UI.rvFilter]?UI.rvFilter:null,shown=items.filter(i=>!f||i[0].id===f);
-  return`<p class="lede">Oldest first. Score each submission against its competency standard. A critical-gate task needs a score of ${D.config.passScore} or more to be Complete.</p>
+  const act=D.trainees.filter(t=>t.active),behind=act.filter(t=>t.stats.behind>0).length;
+  return`${tilesHtml([['inbox',items.length,'Waiting for review',items.length?'amber':''],['users',act.length,'Trainees in the programme',''],['alert',behind,'Behind the calendar',behind?'red':'green']])}
+  <p class="lede">Oldest first. Score each submission against its competency standard. A critical-gate task needs a score of ${D.config.passScore} or more to be Complete.</p>
   ${items.length?`<div class="rvchips" role="group" aria-label="Filter by trainee"><button class="chipbtn ${f?'':'on'}" data-act="rvfilter" data-id="">Everyone <b>${items.length}</b></button>${who.map(w=>`<button class="chipbtn ${f===w.tr.id?'on':''}" data-act="rvfilter" data-id="${esc(w.tr.id)}">${esc(w.tr.name)} <b>${w.n}</b></button>`).join('')}</div>`:''}
-  ${shown.length?shown.map(([tr,t,p])=>`<article class="rv">
-    <div class="rvhead"><div class="rvwho"><span class="avatar" aria-hidden="true">${esc(initials(tr.name))}</span><div><p class="who">${esc(tr.name)}</p><p class="muted">Cycle ${t.cycle}${p.submitted?', submitted '+fmtDate(p.submitted):''} <button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">Open full training</button></p></div></div><div class="pills">${t.gate?'<span class="pill gate">Critical gate</span>':''}</div></div>
+  ${shown.length?shown.map(([tr,t,p])=>`<article class="rv" style="${pcv(t.cycle)}">
+    <div class="rvhead"><div class="rvwho"><span class="avatar" aria-hidden="true">${esc(initials(tr.name))}</span><div><p class="who">${esc(tr.name)}</p><p class="muted">Cycle ${t.cycle}${p.submitted?', submitted '+fmtDate(p.submitted):''} <button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">Open full training</button></p></div></div><div class="pills">${t.gate?`<span class="pill gate">${ico('shield',13)}Critical gate</span>`:''}</div></div>
     <h3>${esc(t.id)} ${esc(t.name)}</h3>
     <div class="kv"><h4>Competency standard</h4><p>${esc(t.standard)}</p></div>
     <div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>
     ${p.reflection?`<div class="kv"><h4>Trainee's reflection</h4><p>${esc(p.reflection)}</p></div>`:''}
     ${p.feedback?`<div class="note amber"><b>Earlier feedback:</b> ${esc(p.feedback)}</div>`:''}
-    ${assessForm(tr,t,p)}</article>`).join(''):'<div class="empty">No reviews waiting. When a trainee submits a task it appears here.</div>'}`;
+    ${assessForm(tr,t,p)}</article>`).join(''):`<div class="empty">${emptyArt('reviews')}<h3>All caught up</h3><p>No reviews waiting. When a trainee submits a task it appears here.</p></div>`}`;
 }
 
 /* ---------- team ---------- */
 function vTeam(){
   const list=D.trainees.filter(t=>UI.archived||t.active);
-  const admin=isAdmin(),assessors=(D.staff||[]);
-  return`<p class="lede">Everyone in onboarding, from one master plan.</p>
-  ${list.length?`<div class="tablewrap"><table><thead><tr><th>Trainee</th><th>Assessors</th><th>Started</th><th>Pathway</th><th>Cycle</th><th>Completion</th><th>Competency</th><th>Gates</th><th>Readiness</th><th>Waiting</th>${admin?'<th></th>':''}</tr></thead><tbody>
-  ${list.map(tr=>{const s=tr.stats;return`<tr style="${tr.active?'':'opacity:.6'}"><td><button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">${esc(tr.name)}</button>${tr.active?'':' <span class="hint">archived</span>'}</td><td>${tr.assessorNames.map(esc).join(', ')||'<span class="hint">Any assessor</span>'}</td><td>${fmtDate(tr.start)}</td><td>${esc(tr.pathway)}</td><td class="num">${s.current} of ${D.config.cycles}${s.behind>0?` <span class="chip warn">${s.behind} behind</span>`:''}</td><td class="num">${s.completion}%</td><td class="num">${s.competency==null?'Not assessed':s.competency+'%'}</td><td class="num">${s.gatesPassed} of ${s.gatesTotal}</td><td><span class="rbadge ${s.effective}">${LEVEL[s.effective]}</span></td><td class="num">${s.pending||''}</td>${admin?`<td><button class="btn ghost small" data-act="edit-trainee" data-id="${esc(tr.id)}">Edit</button></td>`:''}</tr>`}).join('')}
-  </tbody></table></div>`:'<div class="empty">No trainees enrolled yet.</div>'}
+  const admin=isAdmin(),assessors=(D.staff||[]),act=D.trainees.filter(t=>t.active);
+  const bar=v=>v==null?'<span class="hint">Not assessed</span>':`<div class="mini"><div class="t"><i style="width:${v}%"></i></div><b>${v}%</b></div>`;
+  const cleared=act.filter(t=>t.stats.effective!=='notcleared').length,behind=act.filter(t=>t.stats.behind>0).length;
+  return`${tilesHtml([['users',act.length,'In the programme',''],['inbox',pendingTotal(),'Reviews waiting',pendingTotal()?'amber':''],['star',cleared,'Cleared for cases','green'],['alert',behind,'Behind the calendar',behind?'red':''] ])}
+  <p class="lede">Everyone in onboarding, from one master plan.</p>
+  ${list.length?`<div class="tablewrap"><table class="team"><thead><tr><th>Trainee</th><th>Assessors</th><th>Started</th><th>Pathway</th><th>Cycle</th><th>Completion</th><th>Competency</th><th>Gates</th><th>Readiness</th><th>Waiting</th>${admin?'<th></th>':''}</tr></thead><tbody>
+  ${list.map(tr=>{const s=tr.stats;return`<tr style="${tr.active?'':'opacity:.6'}"><td><button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">${esc(tr.name)}</button>${tr.active?'':' <span class="hint">archived</span>'}</td><td>${tr.assessorNames.map(esc).join(', ')||'<span class="hint">Any assessor</span>'}</td><td>${fmtDate(tr.start)}</td><td>${esc(tr.pathway)}</td><td class="num">${s.current} of ${D.config.cycles}${s.behind>0?` <span class="chip warn">${s.behind} behind</span>`:''}</td><td>${bar(s.completion)}</td><td>${bar(s.competency)}</td><td class="num">${s.gatesPassed} of ${s.gatesTotal}</td><td><span class="rbadge ${s.effective}">${LEVEL[s.effective]}</span></td><td class="num">${s.pending||''}</td>${admin?`<td><button class="btn ghost small" data-act="edit-trainee" data-id="${esc(tr.id)}">Edit</button></td>`:''}</tr>`}).join('')}
+  </tbody></table></div>`:`<div class="empty">${emptyArt('seed')}<h3>No trainees yet</h3><p>${admin?'Use the form below to enrol the first one.':'An admin enrols trainees from this tab.'}</p></div>`}
   <div class="row" style="margin-bottom:18px"><label class="row"><input type="checkbox" data-act="archived" ${UI.archived?'checked':''}> Show archived</label><button class="btn ghost small" data-act="export-team">Download team summary (CSV)</button></div>
   ${admin?teamAdmin(assessors):''}`;
 }
@@ -436,12 +475,14 @@ document.addEventListener('click',e=>{
     case'openfile':openFile(ds.tr,ds.t,ds.fid);break;
     case'viewfile':toggleViewer(ds.tr,ds.t,ds.fid);break;
     case'rvfilter':UI.rvFilter=ds.id||null;render();break;
+    case'dismiss-changes':CHANGES=null;render();break;
+    case'goto':{UI.cycle=+ds.c;openSet.add(UI.tid+'|'+ds.t);render();const el=document.querySelector(`[data-key="${CSS.escape(UI.tid+'|'+ds.t)}"]`);if(el)el.scrollIntoView({block:'center',behavior:REDUCED?'auto':'smooth'});break}
     case'assess':{
       const tr=form.dataset.tr,id=form.dataset.t,oc=$('input[data-f=outcome]:checked',form),sc=$('input[data-f=score]:checked',form);
       if(!oc){toast('Choose an outcome.',true);return}
       openSet.add(tr+'|'+id);
       run('assessTask',[tr,id,oc.value,sc?+sc.value:'',$('[data-f=feedback]',form).value],'Assessment saved',null,()=>['outcome','score','feedback'].forEach(f=>delete DRAFT[dk(tr,id,f)]));break}
-    case'ready':run('confirmReadiness',[UI.tid,ds.lv,val('rd-note')],ds.lv==='notcleared'?'Clearance withdrawn':'Readiness confirmed');break;
+    case'ready':run('confirmReadiness',[UI.tid,ds.lv,val('rd-note')],ds.lv==='notcleared'?'Clearance withdrawn':'Readiness confirmed',null,()=>{if(ds.lv!=='notcleared')celebrate(true)});break;
     case'enrol':run('enrolTrainee',[val('nt-name'),val('nt-email'),checked('nt-as'),val('nt-path'),val('nt-start')],'Trainee enrolled');break;
     case'edit-trainee':UI.editTrainee=ds.id;render();{const p=document.getElementById('et');if(p)p.scrollIntoView({block:'center'})}break;
     case'trainee-cancel':UI.editTrainee=null;render();break;
@@ -502,5 +543,5 @@ document.addEventListener('change',async e=>{
 document.addEventListener('toggle',e=>{const d=e.target;if(d.matches&&d.matches('details[data-key]')){d.open?openSet.add(d.dataset.key):openSet.delete(d.dataset.key)}},true);
 
 render();
-call('getBootstrap').then(d=>{setData(d);render()}).catch(e=>{$('#app').innerHTML=`<div class="center"><h2>The app couldn't load</h2><p class="muted">${esc((e&&e.message)||e)}</p></div>`});
+call('getBootstrap').then(d=>{setData(d);detectChanges();render()}).catch(e=>{$('#app').innerHTML=`<div class="center"><h2>The app couldn't load</h2><p class="muted">${esc((e&&e.message)||e)}</p></div>`});
 </script>

@@ -14,10 +14,11 @@ uploaded evidence. Neither is shared with trainees or assessors.
 | `apps-script/Code.gs` | Server: sign-in roles, Sheet storage, uploads, every action |
 | `apps-script/Logic.gs` | Rules with no Google calls: weights, gates, calendar, readiness |
 | `apps-script/SeedData.gs` | The starting module (generated from `source/`) |
-| `apps-script/Index.html`, `Styles.html`, `App.html` | The interface |
+| `apps-script/Index.html`, `Styles.html`, `Art.html`, `App.html` | The interface: page shell, look and feel, illustrations and animation, behaviour |
 | `apps-script/appsscript.json` | Permissions and web-app settings |
 | `source/*.csv` | Your original spreadsheet tabs, kept as the source of the seed data |
 | `tools/build-seed.py` | Rebuilds `SeedData.gs` from `source/` |
+| `tools/build-styles.py` | Rebuilds `Styles.html`. **Edit colours and styles here, not in `Styles.html`**, so the light and dark themes stay in step |
 | `tests/` | Logic tests, server tests and a browser test (see Testing) |
 
 ## Set up (about 15 minutes, once)
@@ -27,7 +28,7 @@ Use a school Google account that will own the data. If that person leaves, owner
 1. Create a new Google Sheet, for example "Well-being Training Data", in the school's Drive.
 2. In the Sheet choose **Extensions > Apps Script**.
 3. Replace the default `Code.gs` with `apps-script/Code.gs`. Then add the other files with the **+** button, using the same names:
-   `Logic.gs`, `SeedData.gs` (script files) and `Index`, `Styles`, `App` (HTML files).
+   `Logic.gs`, `SeedData.gs` (script files) and `Index`, `Styles`, `Art`, `App` (HTML files).
    In the editor, open **Project Settings** and tick **Show "appsscript.json" manifest file in editor**, then paste in `apps-script/appsscript.json`.
 4. Edit `FIRST_ADMIN` and `FIRST_ADMIN_NAME` at the top of `Code.gs` if the first admin is not Richa.
 5. Choose the function `setup` and press **Run**. Approve the permissions. This creates every tab, loads the 76 tasks and creates the private evidence folder.
@@ -66,6 +67,13 @@ Change the files in the editor (or `clasp push`), then **Deploy > Manage deploym
 
 Both gate cycles, the pass score, the number of cycles and days, and the phases are set in **Curriculum > Programme settings**.
 
+## Look and feel
+
+- **Light and dark mode.** Every colour is a theme variable with a light and a dark value, so the app follows each person's device setting. A test measures the contrast of all visible text on every main screen in both modes and fails if anything drops below WCAG AA (4.5:1).
+- **Illustrations and motion are drawn in code**, not loaded as image or GIF files, so they load instantly, work offline, adapt to the theme and cannot be blocked by a school network. They include a plant that grows through five stages as a trainee's completion rises, drifting clouds, a pulsing "you are here" on the cycle path, animated progress bars, and a short confetti burst when work is marked Complete, a gate is passed or readiness is confirmed.
+- **"Since you last visited."** A trainee's own device remembers what they last saw, so on their next visit the app lists what an assessor has decided since (Complete, Partial, Rework) and any change in clearance. This is stored in the browser only; nothing extra is saved on the server.
+- **Reduced motion.** If a person's device asks for reduced motion, all animation and confetti are switched off. The information is still shown.
+
 ## Evidence and privacy
 
 - Uploads (PDF, Office files, images, text, mp3, m4a, mp4; up to 10 MB each, 5 per task) go to a private Drive folder, one sub-folder per trainee. The folder is not shared. The app serves a file only to that trainee and their assessors and admins.
@@ -95,6 +103,8 @@ Still for you to decide:
 ```
 node tests/logic.test.js     # weights, gates, calendar, readiness (no dependencies)
 node tests/server.test.js    # the real Code.gs against fake Google services
+NODE_PATH=$(npm root -g) node tests/contrast.js      # text contrast in light and dark on every main screen
+NODE_PATH=$(npm root -g) node tests/design-shots.js  # light and dark screenshots with realistic sample data
 NODE_PATH=$(npm root -g) node tests/e2e.js   # the real pages in headless Chromium, screenshots in tests/shots/
                                               # (the PDF/Word viewer steps load pdfjs-dist 3.11.174 and mammoth 1.6.0 from
                                               #  LIBS_DIR, default /tmp/claude-0/libs/node_modules: npm install them there)

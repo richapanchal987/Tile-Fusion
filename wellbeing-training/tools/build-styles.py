@@ -1,5 +1,14 @@
-<style>
-:root{
+#!/usr/bin/env python3
+"""Builds apps-script/Styles.html.
+
+Every colour is a CSS variable with a light and a dark value, defined once here and written into both the
+automatic (prefers-color-scheme) and the manual ([data-theme]) dark blocks so they cannot drift apart.
+Run from the wellbeing-training folder:  python3 tools/build-styles.py
+"""
+import pathlib
+root = pathlib.Path(__file__).resolve().parent.parent
+
+LIGHT = """
   --bg:#F2F5F4;--surface:#FFFFFF;--sunk:#E8EEEC;--ink:#1C2B36;--muted:#55656D;--line:#D3DDDA;
   --teal:#1F5E5A;--teal-soft:#DCEAE6;--amber:#85550F;--amber-soft:#F6EBD6;--red:#A9443A;--red-soft:#F5E0DC;--green:#2B6F48;--green-soft:#DCEFE2;
   --p1:#1F5E5A;--p2:#3B5BA5;--p3:#85550F;--p4:#7A4A8C;
@@ -7,9 +16,8 @@
   --leaf1:#2B6F48;--leaf2:#4A9468;--stem:#2B6F48;--soil:#B9A58A;--pot:#C9806A;--bloom:#D9776A;--bloom2:#E7B04A;
   --shadow:0 1px 2px rgba(20,40,40,.06),0 8px 24px rgba(20,40,40,.07);--shadow-up:0 2px 4px rgba(20,40,40,.08),0 14px 30px rgba(20,40,40,.12);
   --glow-a:rgba(31,94,90,.13);--glow-b:rgba(133,85,15,.10);
-
-  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light;}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+"""
+DARK = """
   --bg:#11181C;--surface:#182227;--sunk:#0E1417;--ink:#E3EBE9;--muted:#9AABB0;--line:#2A3940;
   --teal:#7CC4BA;--teal-soft:#1C3532;--amber:#E3AE55;--amber-soft:#382C17;--red:#E68C80;--red-soft:#3A2220;--green:#82CC9F;--green-soft:#1B3325;
   --p1:#7CC4BA;--p2:#9DB4F0;--p3:#E3AE55;--p4:#D2A6E0;
@@ -18,18 +26,9 @@
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);--shadow-up:0 2px 4px rgba(0,0,0,.5),0 14px 30px rgba(0,0,0,.5);
   --glow-a:rgba(124,196,186,.10);--glow-b:rgba(227,174,85,.06);
   color-scheme:dark;
-}}
-:root[data-theme="dark"]{
-  --bg:#11181C;--surface:#182227;--sunk:#0E1417;--ink:#E3EBE9;--muted:#9AABB0;--line:#2A3940;
-  --teal:#7CC4BA;--teal-soft:#1C3532;--amber:#E3AE55;--amber-soft:#382C17;--red:#E68C80;--red-soft:#3A2220;--green:#82CC9F;--green-soft:#1B3325;
-  --p1:#7CC4BA;--p2:#9DB4F0;--p3:#E3AE55;--p4:#D2A6E0;
-  --hero-a:#1C3532;--hero-b:#182227;--cloud:rgba(255,255,255,.07);--sun:#E3AE55;
-  --leaf1:#82CC9F;--leaf2:#5FB07F;--stem:#6FBF8E;--soil:#5A4C3A;--pot:#B5705B;--bloom:#F09A8E;--bloom2:#F2C46B;
-  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);--shadow-up:0 2px 4px rgba(0,0,0,.5),0 14px 30px rgba(0,0,0,.5);
-  --glow-a:rgba(124,196,186,.10);--glow-b:rgba(227,174,85,.06);
-  color-scheme:dark;
-}
+"""
 
+CSS = """
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-behavior:smooth}
 body{margin:0;color:var(--ink);font:15px/1.55 'Public Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
@@ -313,4 +312,10 @@ body.intro .task:nth-child(4),body.intro .tile:nth-child(4){animation-delay:.15s
   .scale{grid-template-columns:repeat(2,1fr)}
   .guide dl{grid-template-columns:1fr}
 }
-</style>
+"""
+
+out = "<style>\n:root{" + LIGHT + "\n  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light;}\n" \
+    + "@media (prefers-color-scheme:dark){:root:not([data-theme=\"light\"]){" + DARK + "}}\n" \
+    + ":root[data-theme=\"dark\"]{" + DARK + "}\n" + CSS + "</style>\n"
+(root / "apps-script" / "Styles.html").write_text(out, encoding="utf-8")
+print("Styles.html", len(out.splitlines()), "lines")
