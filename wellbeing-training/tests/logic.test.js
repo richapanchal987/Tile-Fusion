@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm'), assert = r
 const dir = path.join(__dirname, '..', 'apps-script');
 const src = ['Logic.gs', 'SeedData.gs'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
 const L = vm.runInNewContext(src + `;({ buildCalendar_, expectedCycle_, effectiveWeights_, computeStats_, buildBootstrap_, validateAssessment_,
-  validateReadiness_, statsForTrainee_, normaliseDate_, visibleTo_, extOk_, safeFileName_, SEED })`, {});
+  validateReadiness_, statsForTrainee_, normaliseDate_, workingDaysElapsed_, visibleTo_, extOk_, safeFileName_, SEED })`, {});
 let n = 0;
 const J = x => JSON.parse(JSON.stringify(x));
 const deq = (a, b) => assert.deepStrictEqual(J(a), J(b));
@@ -60,6 +60,19 @@ t('dates: any cell format is read safely, day-first for d/m/y, and never throws'
   assert.strictEqual(n('46300'), '2026-10-05');          // Sheets serial number
   ['', null, undefined, 'tomorrow', 'Mon Oct 05 2026', '31/02/2026', '2026-13-40', '99999'].forEach(v => assert.strictEqual(n(v), '', String(v)));
   assert.deepStrictEqual(J(L.buildCalendar_('not a date', 10, 6)), []);
+});
+t('calendar expectation: 0 before the start, grows day by day, reaches 100 when the window ends', () => {
+  const at = d => stats(newDb(), 'a@fsksurat.in', d).expectedPct;
+  assert.strictEqual(L.workingDaysElapsed_('2026-10-05', '2026-10-04'), 0);
+  assert.strictEqual(L.workingDaysElapsed_('2026-10-05', '2026-10-05'), 1);
+  assert.strictEqual(L.workingDaysElapsed_('2026-10-05', '2026-10-11'), 6, 'Sunday the 11th is not counted');
+  assert.strictEqual(L.workingDaysElapsed_('2026-10-05', '2026-10-12'), 7);
+  assert.strictEqual(at('2026-10-01'), 0);
+  const series = ['2026-10-05', '2026-10-08', '2026-10-10', '2026-10-17', '2026-11-14', '2026-12-31'].map(at);
+  for (let i = 1; i < series.length; i++) assert.ok(series[i] >= series[i - 1], 'never decreases: ' + series);
+  assert.ok(series[0] > 0 && series[0] < 10, 'first day is a small step: ' + series[0]);
+  assert.strictEqual(series[series.length - 1], 100);
+  const db = newDb(); db.trainees[0].start = ''; assert.strictEqual(stats(db, 'a@fsksurat.in').expectedPct, 0, 'no start date, no expectation');
 });
 t('weights: effective weights add up to 100 and follow the topic weights', () => {
   const eff = L.effectiveWeights_(S.topics, S.tasks);

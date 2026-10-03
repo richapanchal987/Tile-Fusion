@@ -16,7 +16,7 @@ function auditInPage() {
     chain.forEach(e => {
       if (e === document.documentElement || e === document.body) return;
       const cs = getComputedStyle(e);
-      if (e.classList && e.classList.contains('hero2')) { cands = [v('--hero-a'), v('--hero-b')]; return; }
+      if (e.classList && (e.classList.contains('hero2') || e.classList.contains('banner'))) { cands = [v('--hero-a'), v('--hero-b')]; return; }
       const bg = rgba(cs.backgroundColor); if (bg[3] > 0) cands = cands.map(c => over(bg, c));
     }); return cands;
   };

@@ -69,10 +69,14 @@ Both gate cycles, the pass score, the number of cycles and days, and the phases 
 
 ## Look and feel
 
+- **FSK brand colours.** Blue `#0050A0`, red `#B02020` and yellow `#F2C21A`, sampled from the school's IB results poster. Positive states (done, cleared) are blue, waiting or partial is yellow, and rework or not cleared is red. The banner fades from blue at the top to red at the bottom, like the poster's numerals, with the poster's yellow bar and dot and a yellow underline. Big numbers use the same blue-to-red fade.
 - **Light and dark mode.** Every colour is a theme variable with a light and a dark value, so the app follows each person's device setting. A test measures the contrast of all visible text on every main screen in both modes and fails if anything drops below WCAG AA (4.5:1).
-- **Illustrations and motion are drawn in code**, not loaded as image or GIF files, so they load instantly, work offline, adapt to the theme and cannot be blocked by a school network. They include a plant that grows through five stages as a trainee's completion rises, drifting clouds, a pulsing "you are here" on the cycle path, animated progress bars, and a short confetti burst when work is marked Complete, a gate is passed or readiness is confirmed.
-- **"Since you last visited."** A trainee's own device remembers what they last saw, so on their next visit the app lists what an assessor has decided since (Complete, Partial, Rework) and any change in clearance. This is stored in the browser only; nothing extra is saved on the server.
+- **Scoreboard.** The trainee's banner shows two big numbers in the poster's style: their completion out of 100, and where the calendar says they should be by today. The two are compared in percentage points; a trainee more than 10 points behind is flagged "behind the calendar" everywhere (banner, Team table, Reviews tile).
+- **Milestone medals.** Earned in order as work is marked Complete: first task, first gate, each phase complete, halfway, supervised practice and independent practice. A new medal pops, is marked "New", and is announced in the "Since you last visited" card with a confetti burst.
+- **Illustrations and motion are drawn in code**, not loaded as image or GIF files, so they load instantly, work offline, adapt to the theme and cannot be blocked by a school network. They include drifting white school doodles behind the banner, a pulsing "you are here" on the cycle path, animated bars and numbers, and confetti when work is marked Complete, a gate is passed or readiness is confirmed.
+- **"Since you last visited."** A trainee's own device remembers what they last saw, so on their next visit the app lists what an assessor has decided since (Complete, Partial, Rework), any change in clearance and any new medal. This is stored in the browser only; nothing extra is saved on the server.
 - **Reduced motion.** If a person's device asks for reduced motion, all animation and confetti are switched off. The information is still shown.
+- **Fonts.** Headings use Montserrat and body text Public Sans, loaded from Google Fonts. If the network blocks that, the app falls back to the device's own fonts.
 
 ## Evidence and privacy
 

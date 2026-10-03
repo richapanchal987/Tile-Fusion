@@ -180,11 +180,14 @@ async function open(browser, email, opts) {
     assert.deepStrictEqual(p.errors, []); await p.context().close();
   });
 
-  await step('delight: growth plant, "since you last visited" card, confetti on Complete, calm for reduced motion', async () => {
+  await step('delight: scoreboard, medals, "since you last visited" card, confetti on Complete, calm for reduced motion', async () => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     let p = await open(browser, 'bina@fsksurat.in', { reuse: ctx });                       // first visit: nothing to compare with
     assert.strictEqual(await p.locator('.changes').count(), 0, 'no card on a first visit');
-    assert.ok((await p.locator('svg.plant').getAttribute('aria-label')).startsWith('Growth: '));
+    assert.strictEqual(await p.locator('.board .gnum').count(), 2, 'two big numbers: completion and the calendar');
+    assert.ok((await p.locator('.board').innerText()).includes('/100'));
+    assert.ok(await p.locator('.medalitem').count() >= 6, 'milestone medals are listed');
+    assert.strictEqual(await p.locator('.medalitem.on').count(), 0, 'nothing earned yet');
     assert.strictEqual(await p.locator('canvas.confetti').count(), 0);
     W.as(ADMIN); W.call('assessTask', ['bina@fsksurat.in', '1.4', 'complete', 3, 'Clear and honest statement.']);
     W.call('assessTask', ['bina@fsksurat.in', '1.1', 'rework', 2, 'Add the Principal to your role map.']);
@@ -192,6 +195,8 @@ async function open(browser, email, opts) {
     const card = p.locator('.changes'); assert.strictEqual(await card.count(), 1);
     const text = await card.innerText();
     assert.ok(text.includes('1.4 Professional Practice Statement') && text.includes('marked complete'), 'complete is reported');
+    assert.ok(text.includes('First task done') && text.includes('medal'), 'a newly earned medal is announced');
+    assert.strictEqual(await p.locator('.medalitem.on.new').count() >= 1, true, 'and marked New');
     assert.ok(text.includes('1.1 Role Mapping') && text.includes('another attempt') && text.includes('Add the Principal'), 'rework is reported with its feedback');
     await p.waitForSelector('canvas.confetti');                                            // celebration for the Complete
     await p.waitForSelector('canvas.confetti', { state: 'detached', timeout: 6000 });      // and it cleans up after itself
@@ -204,7 +209,7 @@ async function open(browser, email, opts) {
     p = await open(browser, 'bina@fsksurat.in', { reuse: calm });
     assert.strictEqual(await p.locator('.changes').count(), 1);
     await p.waitForTimeout(500); assert.strictEqual(await p.locator('canvas.confetti').count(), 0, 'no confetti with reduced motion');
-    assert.strictEqual(await p.locator('.plant .sway').evaluate(e => getComputedStyle(e).animationName), 'none', 'the plant does not sway');
+    assert.strictEqual(await p.locator('.hero-bg .doodles').evaluate(e => getComputedStyle(e).animationName), 'none', 'the doodles stop drifting');
     await calm.close();
   });
 

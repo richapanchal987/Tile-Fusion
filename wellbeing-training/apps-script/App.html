@@ -5,7 +5,7 @@ const STATUS={not:'Not started',progress:'In progress',submitted:'Awaiting revie
 const OUTCOME={complete:['Complete','Meets the standard'],partial:['Partial','Some is there; say what is missing'],rework:['Rework','Not yet; trainee redoes and resubmits'],exempt:['Exempt','Not needed, for example prior experience']};
 const LEVEL={notcleared:'Not cleared for cases',supervised:'Cleared for supervised practice',independent:'Cleared for independent cases'};
 const RANK={notcleared:0,supervised:1,independent:2};
-let D=null,busy=false,SET=null,PH=null,CHANGES=null;
+let D=null,busy=false,SET=null,PH=null,CHANGES=null,NEWBADGES=new Set();
 const UI={view:null,tid:null,cycle:null,rvFilter:null,editTrainee:null,editTopic:null,tpf:null,editTask:null,tf:null,archived:false,log:null};
 const openSet=new Set(),DRAFT={},RES={};
 const FILES={},VIEWING=new Set(); // downloaded evidence (kept so a viewer survives a re-render) and which viewers are open
@@ -28,7 +28,7 @@ const mb=n=>n<1024?n+' B':n<1048576?Math.round(n/1024)+' KB':(n/1048576).toFixed
 const dk=(tid,task,f)=>tid+'|'+task+'|'+f;
 const dv=(tid,task,f,fb)=>{const k=dk(tid,task,f);return k in DRAFT?DRAFT[k]:fb};
 const phaseIdx=c=>{const i=D.config.phases.findIndex(p=>c>=p.from&&c<=p.to);return(i<0?0:i)%4};
-const pcv=c=>`--pc:var(--p${phaseIdx(c)+1})`;
+const pcv=c=>{const n=phaseIdx(c)+1;return`--pc:var(--p${n});--pci:var(--p${n}i);--pcn:var(--p${n}n)`};
 const resFor=t=>D.res.filter(r=>r.task===t.id).concat(D.res.filter(r=>r.topic===t.topic&&!r.task));
 
 function call(fn,...args){return new Promise((res,rej)=>google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args))}
@@ -57,7 +57,7 @@ function render(){
   const tabs=staff?[['review','Reviews'],['trainee','Trainee'],['team','Team']].concat(isAdmin()?[['curriculum','Curriculum']]:[]).concat([['guide','Guide']]):[['trainee','My training'],['guide','Guide']];
   const v=UI.view;
   const act=D.trainees.filter(t=>t.active);
-  app.innerHTML=`
+  app.innerHTML=`${MEDAL_DEFS}
   <header class="top"><div class="top-in">
     <div class="brand"><span class="logo">${LOGO}</span><span>${esc(D.config.appName)}<small>${esc(D.config.orgName)}</small></span></div>
     <nav class="tabs" aria-label="Sections">${tabs.map(([k,l])=>`<button class="tab" data-act="view" data-v="${k}" ${v===k?'aria-current="page"':''}>${l}${k==='review'&&pend?`<span class="count">${pend}</span>`:''}</button>`).join('')}</nav>
@@ -69,10 +69,17 @@ function render(){
   if(!UI.introDone){UI.introDone=true;document.body.classList.add('intro');countUp();setTimeout(()=>document.body.classList.remove('intro'),1700)}
 }
 
-/* ---------- since you last visited, and celebrations ---------- */
+/* ---------- milestones, since you last visited, and celebrations ---------- */
+function milestones(tr){
+  const s=tr.stats,act=D.tasks.filter(t=>t.active),isDone=t=>['complete','exempt'].includes(P(tr,t.id).status),icons=['book','target','eye','flag'];
+  const L=[{id:'first',icon:'check',title:'First task done',on:act.some(isDone)},{id:'gate',icon:'shield',title:'First gate passed',on:s.gatesPassed>=1}];
+  D.config.phases.slice(0,-1).forEach((p,i)=>{const ts=act.filter(t=>t.cycle>=p.from&&t.cycle<=p.to);L.push({id:'ph'+i,icon:icons[i%4],title:p.name.replace(/^Phase \d+\s*[-:]\s*/,'')+' complete',on:ts.length>0&&ts.every(isDone)})});
+  L.push({id:'half',icon:'spark',title:'Halfway there',on:s.completion>=50},{id:'sup',icon:'users',title:'Supervised practice',on:RANK[s.effective]>=1},{id:'ind',icon:'star',title:'Independent practice',on:RANK[s.effective]>=2});
+  return L;
+}
 function detectChanges(){
   if(!D||D.me.role!=='Trainee'||!D.trainees[0])return;
-  const tr=D.trainees[0],key='wb:seen:'+D.me.email,now={s:{},lv:tr.stats.effective};let prev=null;
+  const tr=D.trainees[0],key='wb:seen:'+D.me.email,badges=milestones(tr),now={s:{},lv:tr.stats.effective,b:badges.filter(b=>b.on).map(b=>b.id)};let prev=null;
   try{prev=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
   D.tasks.forEach(t=>{if(t.active)now.s[t.id]=P(tr,t.id).status});
   try{localStorage.setItem(key,JSON.stringify(now))}catch(e){}
@@ -86,21 +93,25 @@ function detectChanges(){
     else if(b==='rework')ch.push({k:'bad',i:'refresh',h:`${name} needs another attempt.${fb}`});
   });
   if(RANK[now.lv]>RANK[prev.lv||'notcleared']){ch.unshift({k:'star',i:'star',h:`You're now <b>${LEVEL[now.lv].toLowerCase()}</b>.`});big=true}
+  if(prev.b)badges.filter(b=>b.on&&!prev.b.includes(b.id)).forEach(b=>{NEWBADGES.add(b.id);ch.push({k:'star',i:'star',h:`You earned the <b>${esc(b.title)}</b> medal.`});party=true});
   CHANGES=ch.length?ch:null;
   if(big)celebrate(true);else if(party)celebrate(false);
 }
 const changesCard=()=>`<section class="changes" aria-label="Since you last visited"><div class="hd"><h3>${ico('spark')} Since you last visited</h3><button class="btn ghost small" data-act="dismiss-changes">Dismiss</button></div><ul>${CHANGES.map(c=>`<li class="${c.k}"><span class="badge">${ico(c.i,14)}</span><span>${c.h}</span></li>`).join('')}</ul></section>`;
 
 /* ---------- trainee view ---------- */
+const LEVEL_SHORT={notcleared:'Not cleared',supervised:'Supervised',independent:'Independent'};
+const paceGap=tr=>tr.stats.completion-tr.stats.expectedPct;
+const paceState=tr=>{const s=tr.stats;if(s.calendarState==='unknown'||s.calendarState==='notstarted')return s.calendarState;if(s.finished)return'done';const g=paceGap(tr);return g<-10?'behind':g>10?'ahead':'on'};
+const pts=n=>Math.abs(n)+' point'+(Math.abs(n)===1?'':'s');
 function paceChip(tr){
-  const s=tr.stats;
-  if(s.calendarState==='unknown')return`<span class="chip warn">No start date set</span>`;
-  if(s.calendarState==='notstarted')return`<span class="chip">Starts ${fmtDate(tr.start)}</span>`;
-  if(s.finished)return`<span class="chip good">All cycles worked through</span>`;
-  const tip=`The calendar puts this trainee in cycle ${s.expected}; their work is in cycle ${s.current}.`;
-  if(s.behind>0)return`<span class="chip warn" title="${esc(tip)}">${s.behind} cycle${s.behind>1?'s':''} behind the calendar</span>`;
-  if(s.behind<0)return`<span class="chip good" title="${esc(tip)}">${-s.behind} cycle${s.behind<-1?'s':''} ahead of the calendar</span>`;
-  return`<span class="chip good" title="${esc(tip)}">On track with the calendar</span>`;
+  const st=paceState(tr),g=paceGap(tr),tip='Compares completion with where the calendar says the work should be by today.';
+  if(st==='unknown')return`<span class="chip warn">No start date set</span>`;
+  if(st==='notstarted')return`<span class="chip">Starts ${fmtDate(tr.start)}</span>`;
+  if(st==='done')return`<span class="chip good">All cycles worked through</span>`;
+  if(st==='behind')return`<span class="chip warn" title="${tip}">${pts(g)} behind the calendar</span>`;
+  if(st==='ahead')return`<span class="chip good" title="${tip}">${pts(g)} ahead of the calendar</span>`;
+  return`<span class="chip good" title="${tip}">On track with the calendar</span>`;
 }
 
 function readyCard(tr){
@@ -137,35 +148,38 @@ function pathHtml(tr,cyc){
   return h;
 }
 
-function meter(l,v,h){return`<div class="meter"><div class="lab"><span>${l}</span><b ${v==null?'':`data-count="${v}" data-suffix="%"`}>${v==null?'Not assessed yet':v+'%'}</b></div><div class="track"><i style="width:${v||0}%"></i></div><p class="hint">${h}</p></div>`}
 const nextUp=tr=>D.tasks.filter(t=>t.active&&!['complete','exempt','submitted'].includes(P(tr,t.id).status)).slice(0,3);
+const pageBanner=(title,sub)=>`<section class="banner">${HERO_BG}<span class="accent-bar"></span><span class="accent-dot"></span><h1>${esc(title)}</h1>${sub?`<p class="hero-sub">${esc(sub)}</p>`:''}</section>`;
+const stat=(n,suffix,icon,label)=>`<div class="stat"><div class="gnum">${n==null?'&ndash;':`<span data-count="${n}">${n}</span>`}<small>${suffix}</small></div><div class="uline"></div><div class="slab">${ico(icon,22)}<span>${label}</span></div></div>`;
 
 function vTrainee(){
   const tr=T(UI.tid);
-  if(!tr)return`<div class="empty" style="margin-top:24px">${emptyArt('seed')}<h3>No trainees yet</h3><p>${isAdmin()?'Enrol one from the Team tab.':'A trainee will appear here once an admin enrols them.'}</p></div>`;
-  const s=tr.stats,cyc=UI.cycle||s.current,N=D.config.cycles,cd=(tr.cal||[])[cyc-1],st=stageOf(s.completion);
+  if(!tr)return`${pageBanner('Trainee','No trainees yet')}<div class="empty" style="margin-top:24px">${emptyArt('seed')}<h3>No trainees yet</h3><p>${isAdmin()?'Enrol one from the Team tab.':'A trainee will appear here once an admin enrols them.'}</p></div>`;
+  const s=tr.stats,cyc=UI.cycle||s.current,N=D.config.cycles,cd=(tr.cal||[])[cyc-1];
   const tasks=D.tasks.filter(t=>t.cycle===cyc&&t.active);
   const mine=D.me.role==='Trainee'&&tr.id===D.me.email;
   const cycTasks=D.tasks.filter(t=>t.cycle===s.current&&t.active),cycDone=cycTasks.filter(t=>['complete','exempt'].includes(P(tr,t.id).status)).length;
-  const subj=mine?"You're":"They're",nu=nextUp(tr);
+  const subj=mine?"You're":"They're",nu=nextUp(tr),diff=s.completion-s.expectedPct,ms=milestones(tr);
+  const hint=s.calendarState==='unknown'?'No start date has been set.':s.calendarState==='notstarted'?`Training starts ${fmtDate(tr.start)}.`:diff===0?'Right on the calendar.':`${Math.abs(diff)} percentage point${Math.abs(diff)===1?'':'s'} ${diff>0?'ahead of':'behind'} the calendar.`;
   return`
-  <section class="hero2" style="${pcv(s.current)}">${HERO_BG}
+  <section class="hero2">${HERO_BG}<span class="accent-bar"></span><span class="accent-dot"></span>
     <div>
       <p class="eyebrow">${mine?greeting():'Trainee'}</p>
       <h1>${esc(tr.name)}</h1>
       <p class="hero-sub">${s.finished?`${mine?'You have':'They have'} worked through every cycle.`:`${subj} in cycle ${s.current}, ${esc(phaseShort(s.current))}: ${cycDone} of ${cycTasks.length} tasks complete.`}</p>
       <div class="chips"><span class="chip">${esc(tr.pathway)} pathway</span>${paceChip(tr)}<span class="chip">Started ${fmtDate(tr.start)}</span><span class="chip">${tr.assessorNames.length?'Assessors: '+tr.assessorNames.map(esc).join(', '):'No assessor assigned yet'}</span></div>
       <div class="hero-actions"><button class="btn ghost small" data-act="export-tracker">Download tracker (CSV)</button></div></div>
-    <div class="growth">${plantSvg(st)}<p class="cap">${STAGES[st]}</p><p class="sub">Grows as work is marked complete</p></div>
+    <div class="board"><div class="stats">${stat(s.completion,'/100','user',(mine?'Your':'Their')+'<br>completion')}${stat(s.expectedPct,'/100','calendar','Calendar<br>expects')}</div><p class="hint">${hint}</p></div>
     ${readyCard(tr)}
   </section>
   ${mine&&CHANGES?changesCard():''}
+  <section class="badges" aria-label="Milestones"><h3>${ico('star')} Milestones <span class="hint">${ms.filter(m=>m.on).length} of ${ms.length}</span></h3><ul class="medals">${ms.map(m=>`<li class="medalitem ${m.on?'on':'off'} ${NEWBADGES.has(m.id)&&mine?'new':''}">${medal(m.icon,m.on)}<span class="mt">${esc(m.title)}</span><small>${m.on?'Earned':'Locked'}</small></li>`).join('')}</ul></section>
   <div class="pathwrap"><div class="path">${pathHtml(tr,cyc)}</div></div>
   <div class="cols">
     <section><div class="sechead" style="${pcv(cyc)}"><h2>Cycle ${cyc}</h2><span class="muted">${esc(phaseOf(cyc))}${cd?', '+fmtShort(cd.start)+' to '+fmtShort(cd.end):''}, ${tasks.length} task${tasks.length===1?'':'s'}</span></div>
       ${tasks.map(t=>taskCard(tr,t,mine)).join('')||'<div class="empty">No tasks in this cycle.</div>'}</section>
     <aside>
-      <div class="card">${meter('Training completion',s.completion,'Tasks an assessor has marked Complete, weighted by topic')}${meter('Competency',s.competency,'Average score of assessed tasks, weighted')}<p class="hint">A high percentage cannot make up for a critical gate that is not passed.</p></div>
+      <div class="card"><div class="stats">${stat(s.competency,'/100','star','Competency')}${stat(s.gatesPassed,'/'+s.gatesTotal,'shield','Gates passed')}</div><p class="hint">Competency is the weighted average score of assessed tasks. A high percentage cannot make up for a critical gate that is not passed.</p></div>
       ${nu.length?`<div class="card"><h3>${ico('target')} Next up</h3><ul class="nextup">${nu.map(t=>`<li><button data-act="goto" data-c="${t.cycle}" data-t="${esc(t.id)}" style="${pcv(t.cycle)}">${ico(TYPE_ICON[t.type]||'target',18)}<b>${esc(t.id)} ${esc(t.name)}</b><small>Cycle ${t.cycle}${t.gate?', critical gate':''}</small></button></li>`).join('')}</ul></div>`:''}
       <div class="card"><details ${openSet.has('gates')?'open':''} data-key="gates"><summary>Critical gates: ${s.gatesPassed} of ${s.gatesTotal}</summary><ul class="gl">${s.gates.map(g=>`<li class="${g.state}"><span class="ic2" aria-hidden="true"></span><span>${esc(g.id)} ${esc(g.name)}<small>${g.state==='pass'?'Passed':g.state==='attention'?'Needs another attempt':'Cycle '+g.cycle}</small></span></li>`).join('')}</ul></details></div>
     </aside>
@@ -240,9 +254,10 @@ function vReview(){
   items.sort((a,b)=>String(a[2].submitted).localeCompare(String(b[2].submitted)));
   const by={};items.forEach(([tr])=>{(by[tr.id]=by[tr.id]||{tr:tr,n:0}).n++});
   const who=Object.values(by),f=UI.rvFilter&&by[UI.rvFilter]?UI.rvFilter:null,shown=items.filter(i=>!f||i[0].id===f);
-  const act=D.trainees.filter(t=>t.active),behind=act.filter(t=>t.stats.behind>0).length;
-  return`${tilesHtml([['inbox',items.length,'Waiting for review',items.length?'amber':''],['users',act.length,'Trainees in the programme',''],['alert',behind,'Behind the calendar',behind?'red':'green']])}
-  <p class="lede">Oldest first. Score each submission against its competency standard. A critical-gate task needs a score of ${D.config.passScore} or more to be Complete.</p>
+  const act=D.trainees.filter(t=>t.active),behind=act.filter(t=>paceState(t)==='behind').length;
+  return`${pageBanner('Reviews','Work waiting for your decision, oldest first.')}
+  ${tilesHtml([['inbox',items.length,'Waiting for review',items.length?'amber':''],['users',act.length,'Trainees in the programme',''],['alert',behind,'Behind the calendar',behind?'red':'green']])}
+  <p class="lede">Score each submission against its competency standard. A critical-gate task needs a score of ${D.config.passScore} or more to be Complete.</p>
   ${items.length?`<div class="rvchips" role="group" aria-label="Filter by trainee"><button class="chipbtn ${f?'':'on'}" data-act="rvfilter" data-id="">Everyone <b>${items.length}</b></button>${who.map(w=>`<button class="chipbtn ${f===w.tr.id?'on':''}" data-act="rvfilter" data-id="${esc(w.tr.id)}">${esc(w.tr.name)} <b>${w.n}</b></button>`).join('')}</div>`:''}
   ${shown.length?shown.map(([tr,t,p])=>`<article class="rv" style="${pcv(t.cycle)}">
     <div class="rvhead"><div class="rvwho"><span class="avatar" aria-hidden="true">${esc(initials(tr.name))}</span><div><p class="who">${esc(tr.name)}</p><p class="muted">Cycle ${t.cycle}${p.submitted?', submitted '+fmtDate(p.submitted):''} <button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">Open full training</button></p></div></div><div class="pills">${t.gate?`<span class="pill gate">${ico('shield',13)}Critical gate</span>`:''}</div></div>
@@ -259,11 +274,11 @@ function vTeam(){
   const list=D.trainees.filter(t=>UI.archived||t.active);
   const admin=isAdmin(),assessors=(D.staff||[]),act=D.trainees.filter(t=>t.active);
   const bar=v=>v==null?'<span class="hint">Not assessed</span>':`<div class="mini"><div class="t"><i style="width:${v}%"></i></div><b>${v}%</b></div>`;
-  const cleared=act.filter(t=>t.stats.effective!=='notcleared').length,behind=act.filter(t=>t.stats.behind>0).length;
-  return`${tilesHtml([['users',act.length,'In the programme',''],['inbox',pendingTotal(),'Reviews waiting',pendingTotal()?'amber':''],['star',cleared,'Cleared for cases','green'],['alert',behind,'Behind the calendar',behind?'red':''] ])}
-  <p class="lede">Everyone in onboarding, from one master plan.</p>
+  const cleared=act.filter(t=>t.stats.effective!=='notcleared').length,behind=act.filter(t=>paceState(t)==='behind').length;
+  return`${pageBanner('Team','Everyone in onboarding, from one master plan.')}
+  ${tilesHtml([['users',act.length,'In the programme',''],['inbox',pendingTotal(),'Reviews waiting',pendingTotal()?'amber':''],['star',cleared,'Cleared for cases','green'],['alert',behind,'Behind the calendar',behind?'red':''] ])}
   ${list.length?`<div class="tablewrap"><table class="team"><thead><tr><th>Trainee</th><th>Assessors</th><th>Started</th><th>Pathway</th><th>Cycle</th><th>Completion</th><th>Competency</th><th>Gates</th><th>Readiness</th><th>Waiting</th>${admin?'<th></th>':''}</tr></thead><tbody>
-  ${list.map(tr=>{const s=tr.stats;return`<tr style="${tr.active?'':'opacity:.6'}"><td><button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">${esc(tr.name)}</button>${tr.active?'':' <span class="hint">archived</span>'}</td><td>${tr.assessorNames.map(esc).join(', ')||'<span class="hint">Any assessor</span>'}</td><td>${fmtDate(tr.start)}</td><td>${esc(tr.pathway)}</td><td class="num">${s.current} of ${D.config.cycles}${s.behind>0?` <span class="chip warn">${s.behind} behind</span>`:''}</td><td>${bar(s.completion)}</td><td>${bar(s.competency)}</td><td class="num">${s.gatesPassed} of ${s.gatesTotal}</td><td><span class="rbadge ${s.effective}">${LEVEL[s.effective]}</span></td><td class="num">${s.pending||''}</td>${admin?`<td><button class="btn ghost small" data-act="edit-trainee" data-id="${esc(tr.id)}">Edit</button></td>`:''}</tr>`}).join('')}
+  ${list.map(tr=>{const s=tr.stats;return`<tr style="${tr.active?'':'opacity:.6'}"><td><button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">${esc(tr.name)}</button>${tr.active?'':' <span class="hint">archived</span>'}</td><td>${tr.assessorNames.map(esc).join(', ')||'<span class="hint">Any assessor</span>'}</td><td>${fmtDate(tr.start)}</td><td>${esc(tr.pathway)}</td><td class="num">${s.current} of ${D.config.cycles}${paceState(tr)==='behind'?` <span class="chip warn">${pts(paceGap(tr))} behind</span>`:''}</td><td>${bar(s.completion)}</td><td>${bar(s.competency)}</td><td class="num">${s.gatesPassed} of ${s.gatesTotal}</td><td><span class="rbadge ${s.effective}" title="${LEVEL[s.effective]}">${LEVEL_SHORT[s.effective]}</span></td><td class="num">${s.pending||''}</td>${admin?`<td><button class="btn ghost small" data-act="edit-trainee" data-id="${esc(tr.id)}">Edit</button></td>`:''}</tr>`}).join('')}
   </tbody></table></div>`:`<div class="empty">${emptyArt('seed')}<h3>No trainees yet</h3><p>${admin?'Use the form below to enrol the first one.':'An admin enrols trainees from this tab.'}</p></div>`}
   <div class="row" style="margin-bottom:18px"><label class="row"><input type="checkbox" data-act="archived" ${UI.archived?'checked':''}> Show archived</label><button class="btn ghost small" data-act="export-team">Download team summary (CSV)</button></div>
   ${admin?teamAdmin(assessors):''}`;
@@ -333,7 +348,7 @@ function vCurriculum(){
   if(!SET){SET=Object.assign({},{cycles:D.config.cycles,daysPerCycle:D.config.daysPerCycle,passScore:D.config.passScore,supervisedGateCycle:D.config.supervisedGateCycle,urgentGateCycle:D.config.urgentGateCycle,maxUploadMb:D.config.maxUploadMb});PH=D.config.phases.map(p=>Object.assign({},p))}
   const total=D.topics.reduce((a,t)=>a+t.w,0);
   const setField=(k,l,min,max)=>`<div class="field"><label for="st-${k}">${l}</label><input type="number" id="st-${k}" min="${min}" max="${max}" data-set="${k}" value="${esc(SET[k])}"></div>`;
-  return`<p class="lede">Everything a trainee sees comes from here. Changes apply straight away. Tasks are archived rather than deleted, so nobody loses past progress.</p>
+  return`${pageBanner('Curriculum','Everything a trainee sees comes from here. Changes apply straight away. Tasks are archived rather than deleted, so nobody loses past progress.')}
   <section class="topic"><h3>Programme settings</h3>
     <div class="formgrid">${setField('cycles','Number of cycles',1,20)}${setField('daysPerCycle','Working days per cycle',1,12)}${setField('passScore','Gate pass score (1 to 4)',2,4)}${setField('supervisedGateCycle','Supervised practice unlocks after gates through cycle',0,20)}${setField('urgentGateCycle','Same, Urgent pathway',0,20)}${setField('maxUploadMb','Largest upload (MB)',1,25)}</div>
     <div class="kv"><h4>Phases</h4>${PH.map((p,i)=>`<div class="resrow" style="grid-template-columns:2fr 1fr 1fr auto"><input type="text" aria-label="Phase name" value="${esc(p.name)}" data-ph="${i}" data-pf="name"><input type="number" aria-label="From cycle" value="${esc(p.from)}" data-ph="${i}" data-pf="from"><input type="number" aria-label="To cycle" value="${esc(p.to)}" data-ph="${i}" data-pf="to"><button class="btn ghost small" data-act="ph-del" data-i="${i}">Remove</button></div>`).join('')}<div class="row"><button class="btn ghost small" data-act="ph-add">Add phase</button></div></div>
@@ -355,7 +370,7 @@ function vCurriculum(){
 /* ---------- guide ---------- */
 function vGuide(){
   const c=D.config;
-  return`<div class="guide"><h1 style="margin-top:20px">How this programme works</h1>
+  return`${pageBanner('Guide','How this programme works')}<div class="guide" style="margin-top:22px">
   <p class="muted">Finishing the tasks is not the aim. The aim is to show, to people who watch you work, that you are ready to work safely with students.</p>
   <section><h2>The shape of it</h2><p>${c.cycles} cycles of ${c.daysPerCycle} working days (Sundays are not counted), so up to ${c.cycles*c.daysPerCycle} working days. That is the longest it should take. You can move faster if the work is ready.</p></section>
   <section><h2>Two numbers, and a gate</h2><dl><dt>Training completion</dt><dd>How much of the programme an assessor has marked Complete, weighted by topic. Partial counts half.</dd><dt>Competency</dt><dd>How well you did, as an average of assessed scores.</dd><dt>Critical gates</dt><dd>Safety-critical tasks such as confidentiality, escalation, boundaries, referral, documentation and basic counselling skills. Each needs Complete with a score of ${c.passScore} or more. A high percentage cannot make up for a gate that is not passed.</dd></dl></section>
@@ -380,8 +395,8 @@ function exportTracker(tr){
   download('tracker-'+tr.name.replace(/\W+/g,'-')+'.csv',rows);
 }
 function exportTeam(){
-  const rows=[['Trainee','Email','Pathway','Started','Assessors','Current cycle','Behind (cycles)','Completion %','Competency %','Gates passed','Gates total','Readiness','Reviews waiting','Active']];
-  D.trainees.forEach(tr=>{const s=tr.stats;rows.push([tr.name,tr.id,tr.pathway,tr.start,tr.assessorNames.join('; '),s.current,Math.max(0,s.behind),s.completion,s.competency==null?'':s.competency,s.gatesPassed,s.gatesTotal,LEVEL[s.effective],s.pending,tr.active?'Yes':'No'])});
+  const rows=[['Trainee','Email','Pathway','Started','Assessors','Current cycle','Points behind calendar','Completion %','Competency %','Gates passed','Gates total','Readiness','Reviews waiting','Active']];
+  D.trainees.forEach(tr=>{const s=tr.stats;rows.push([tr.name,tr.id,tr.pathway,tr.start,tr.assessorNames.join('; '),s.current,Math.max(0,-paceGap(tr)),s.completion,s.competency==null?'':s.competency,s.gatesPassed,s.gatesTotal,LEVEL[s.effective],s.pending,tr.active?'Yes':'No'])});
   download('team-summary.csv',rows);
 }
 

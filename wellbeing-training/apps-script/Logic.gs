@@ -73,6 +73,15 @@ function buildCalendar_(startIso, cycles, perCycle) {
   return out;
 }
 
+/** Working days (Sundays excluded) from the start date through today, counting both. 0 before the start. */
+function workingDaysElapsed_(startIso, todayIso) {
+  const s = isoToUtc_(startIso), t = isoToUtc_(todayIso);
+  if (!s || !t || t < s) return 0;
+  let n = 0;
+  for (let d = s; d <= t; d = nextDay_(d)) if (d.getUTCDay() !== 0) n++;
+  return n;
+}
+
 /** Which cycle the calendar says the trainee should be in today. */
 function expectedCycle_(cal, todayIso) {
   if (!cal.length) return { cycle: 0, state: 'unknown' };
@@ -141,7 +150,12 @@ function computeStats_(tr, ctx) {
   if (finished) current = s.cycles;
 
   const exp = expectedCycle_(ctx.cal, ctx.todayIso);
+  // Where the calendar says the work should be by today: earlier cycles in full, the current one in proportion to the days gone.
+  const elapsed = workingDaysElapsed_(tr.start, ctx.todayIso);
+  let expW = 0;
+  tasks.forEach(t => { expW += (eff[t.id] || 0) * Math.max(0, Math.min(1, (elapsed - (t.cycle - 1) * s.daysPerCycle) / s.daysPerCycle)); });
   return {
+    expectedPct: totalW && ctx.cal.length ? Math.round(expW / totalW * 100) : 0,
     completion: totalW ? Math.round(comp / totalW * 100) : 0,
     competency: cw ? Math.round(cs / cw * 100) : null,
     gates, gatesPassed: gates.filter(g => g.state === 'pass').length, gatesTotal: gates.length,

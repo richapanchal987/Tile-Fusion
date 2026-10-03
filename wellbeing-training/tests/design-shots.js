@@ -16,11 +16,12 @@ const { HTML, open, shots } = require('./sample-world');
     if (p.errors.length) console.log('ERRORS', scheme, p.errors); await p.context().close();
     p = await open(browser, 'chitra@fsksurat.in', scheme, { width: 390, height: 844 }); await p.screenshot({ path: path.join(shots, `design-mobile-${scheme}.png`) }); await p.context().close();
     p = await open(browser, 'nobody@fsksurat.in', scheme, { width: 800, height: 520 }); await p.screenshot({ path: path.join(shots, `design-notenrolled-${scheme}.png`) }); await p.context().close();
-    // all five plant stages side by side
-    const c = await browser.newContext({ viewport: { width: 1100, height: 330 }, colorScheme: scheme }); const g = await c.newPage();
+    // every medal, earned and locked
+    const c = await browser.newContext({ viewport: { width: 1100, height: 340 }, colorScheme: scheme }); const g = await c.newPage();
     await g.route('http://app.test/', r => r.fulfill({ contentType: 'text/html', body: HTML })); await g.addInitScript(() => { window.google = { script: { run: { withSuccessHandler: () => ({ withFailureHandler: () => new Proxy({}, { get: () => () => {} }) }) } } }; }); await g.goto('http://app.test/');
-    await g.evaluate(() => { document.body.className = 'intro'; document.getElementById('app').innerHTML = '<main><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;padding-top:20px">' + [0, 1, 2, 3, 4].map(i => '<div class="card growth">' + plantSvg(i) + '<p class="cap">' + STAGES[i] + '</p></div>').join('') + '</div></main>'; });
-    await g.waitForTimeout(1800); await g.screenshot({ path: path.join(shots, `design-plants-${scheme}.png`) }); await c.close();
+    await g.evaluate(() => { document.body.className = 'intro'; const names = [['check', 'First task done'], ['shield', 'First gate passed'], ['book', 'Foundation complete'], ['spark', 'Halfway there'], ['target', 'Skill Development complete'], ['users', 'Supervised practice'], ['eye', 'Supervised Practice complete'], ['star', 'Independent practice']];
+      document.getElementById('app').innerHTML = MEDAL_DEFS + '<main><ul class="medals" style="padding-top:20px">' + names.map((n, i) => '<li class="medalitem ' + (i < 4 ? 'on' : 'off') + '">' + medal(n[0], i < 4) + '<span class="mt">' + n[1] + '</span><small>' + (i < 4 ? 'Earned' : 'Locked') + '</small></li>').join('') + '</ul></main>'; });
+    await g.waitForTimeout(1500); await g.screenshot({ path: path.join(shots, `design-medals-${scheme}.png`) }); await c.close();
   }
   await browser.close(); console.log('done');
 })();
