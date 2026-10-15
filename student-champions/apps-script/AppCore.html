@@ -1,0 +1,127 @@
+<script>
+'use strict';
+/* Core: shared state, helpers, the page shell, milestones. The other App*.html files add the screens and the events. */
+let SCALE={},STATUS={},LEVEL={},WD={};          // wording, filled from the server's config (programme.json) when the page loads
+let D=null,busy=false,SET=null,PH=null,CHANGES=null,NEWBADGES=new Set();
+const UI={view:null,tid:null,cycle:null,rvFilter:null,editTrainee:null,editTopic:null,tpf:null,editTask:null,tf:null,rubTask:null,rub:null,archived:false,log:null};
+const openSet=new Set(),DRAFT={},RES={},DOCS={},OPENDOC=new Set();
+const FILES={},VIEWING=new Set(); // downloaded evidence (kept so a viewer survives a re-render) and which viewers are open
+
+/* ---------- helpers ---------- */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $=(s,r)=>(r||document).querySelector(s);
+const isStaff=()=>!!D&&(D.me.role==='Admin'||D.me.role==='Assessor');
+const isAdmin=()=>!!D&&D.me.role==='Admin';
+const isCertifier=()=>!!D&&!!D.me.certifier;
+const slug=s=>String(s).replace(/\W/g,'_');
+const isUrl=u=>/^https?:\/\//i.test(u||'');
+const T=id=>D.trainees.find(t=>t.id===id);
+const P=(tr,id)=>tr.p[id]||{status:'not',files:[]};
+const topicOf=id=>D.topics.find(t=>t.id===id)||{name:'Module '+id,w:0,need:60};
+const phaseOf=c=>{const p=D.config.phases.find(x=>c>=x.from&&c<=x.to);return p?p.name:''};
+const phaseShortName=n=>String(n||'').replace(/^Phase \d+\s*[-:]\s*/,'');
+const phaseShort=c=>phaseShortName(phaseOf(c));
+const fmtDate=d=>{if(!d)return'';try{return new Date(String(d).slice(0,10)+'T00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}catch(e){return d}};
+const fmtShort=d=>{try{return new Date(d+'T00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})}catch(e){return d}};
+const mb=n=>n<1024?n+' B':n<1048576?Math.round(n/1024)+' KB':(n/1048576).toFixed(1)+' MB';
+const dk=(tid,task,f)=>tid+'|'+task+'|'+f;
+const dv=(tid,task,f,fb)=>{const k=dk(tid,task,f);return k in DRAFT?DRAFT[k]:fb};
+const phaseIdx=c=>{const i=D.config.phases.findIndex(p=>c>=p.from&&c<=p.to);return(i<0?0:i)%4};
+const pcv=c=>{const n=phaseIdx(c)+1;return`--pc:var(--p${n});--pci:var(--p${n}i);--pcn:var(--p${n}n)`};
+const resFor=t=>D.res.filter(r=>r.task===t.id).concat(D.res.filter(r=>r.topic===t.topic&&!r.task));
+const aiKey=(t,p)=>(p&&p.ai)||t.ai||'ask';
+const dayDiff=(a,b)=>Math.round((new Date(a+'T00:00')-new Date(b+'T00:00'))/864e5);
+const FINISHED=['complete','exempt','submitted'];
+/** 'overdue', 'soon' (within 3 days), 'later', or '' when there is no due date or the task is already handed in. */
+function dueState(p){if(!p||!p.due||FINISHED.includes(p.status))return'';const d=dayDiff(p.due,D.config.today);return d<0?'overdue':d<=3?'soon':'later'}
+const dueText=p=>{const d=dayDiff(p.due,D.config.today);return d<0?`Due ${fmtShort(p.due)}, ${-d} day${d===-1?'':'s'} late`:d===0?'Due today':`Due ${fmtShort(p.due)}`};
+
+function call(fn,...args){return new Promise((res,rej)=>google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args))}
+function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast show'+(err?' err':'');clearTimeout(t._h);t._h=setTimeout(()=>t.className='toast',err?7000:2500)}
+function pendingTotal(){return D.trainees.reduce((a,t)=>a+(t.active?t.stats.pending:0),0)}
+function setData(d){
+  D=d;if(!D.config)return;
+  SCALE=D.config.scale;STATUS=D.config.statusLabels;WD=D.config.words;LEVEL={notcertified:D.config.levels.notcertified.label,certified:D.config.levels.certified.label};
+  if(!D.tasks)return;
+  D.rubrics.forEach(r=>{r.group=D.rubricGroups[r.g]||''});   // the server sends each group text once
+  D.tasks.sort((a,b)=>a.cycle-b.cycle||a.order-b.order);
+  const staff=isStaff();
+  if(!UI.view)UI.view=staff&&pendingTotal()?'review':'trainee';
+  const act=D.trainees.filter(t=>t.active);
+  if(staff){if(!UI.tid||!act.some(t=>t.id===UI.tid))UI.tid=(act[0]||{}).id}else UI.tid=D.me.email;
+}
+async function run(fn,args,ok,start,after){
+  if(busy)return;busy=true;document.body.classList.add('busy');if(start)toast(start);
+  try{setData(await call(fn,...args));if(after)after();toast(ok)}catch(e){toast((e&&e.message)||String(e),true)}
+  finally{busy=false;document.body.classList.remove('busy');render()}
+}
+const roleLabel=()=>D.me.role==='Admin'?WD.admin:D.me.role==='Assessor'?WD.assessor:WD.Trainee;
+
+/* ---------- shell ---------- */
+function render(){
+  const app=$('#app');
+  if(!D){app.innerHTML=`<div class="center">${emptyArt('seed')}<h2>Loading your training</h2><p class="muted">One moment.</p></div>`;return}
+  if(D.me.role==='None'){app.innerHTML=`<div class="center">${emptyArt('lock')}<h1>You're not enrolled yet</h1><p class="muted">You're signed in as ${esc(D.me.email||'an unknown account')}. Ask your Team Leader or an admin to enrol you, then reload this page.</p></div>`;return}
+  const staff=isStaff(),pend=staff?pendingTotal():0;
+  const tabs=staff?[['review','Reviews'],['trainee',WD.Trainee],['team','Team']].concat(isAdmin()?[['curriculum','Curriculum']]:[]).concat([['guide','Guide']]):[['trainee','My training'],['guide','Guide']];
+  const v=UI.view;
+  const act=D.trainees.filter(t=>t.active);
+  app.innerHTML=`${MEDAL_DEFS}
+  <header class="top"><div class="top-in">
+    <div class="brand"><span class="logo">${LOGO}</span><span>${esc(D.config.appName)}<small>${esc(D.config.orgName)}</small></span></div>
+    <nav class="tabs" aria-label="Sections">${tabs.map(([k,l])=>`<button class="tab" data-act="view" data-v="${k}" ${v===k?'aria-current="page"':''}>${l}${k==='review'&&pend?`<span class="count">${pend}</span>`:''}</button>`).join('')}</nav>
+    <span class="who-chip">${esc(D.me.name||D.me.email)}, ${esc(roleLabel().toLowerCase())}${isCertifier()?', '+esc(WD.certifier.toLowerCase()):''}</span>
+  </div></header>
+  ${v==='trainee'&&staff&&act.length?`<div class="proto"><label>${WD.Trainee} <select data-act="pick" aria-label="Choose ${WD.trainee}">${act.map(t=>`<option value="${esc(t.id)}" ${t.id===UI.tid?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label><span>You're viewing their training. Only they can submit work; you can record assessments.</span></div>`:''}
+  <main>${v==='trainee'?vTrainee():v==='review'?vReview():v==='team'?vTeam():v==='curriculum'?vCurriculum():vGuide()}</main>`;
+  mountViewers();
+  if(!UI.introDone){UI.introDone=true;document.body.classList.add('intro');countUp();setTimeout(()=>document.body.classList.remove('intro'),1700)}
+}
+
+/* ---------- milestones, since you last visited, and celebrations ---------- */
+function milestones(tr){
+  const s=tr.stats,act=D.tasks.filter(t=>t.active),isDone=t=>['complete','exempt'].includes(P(tr,t.id).status),icons=['book','target','eye','flag'];
+  const L=[{id:'first',icon:'check',title:'First task done',on:act.some(isDone)},{id:'gate',icon:'shield',title:'First gate passed',on:s.gatesPassed>=1}];
+  D.config.phaseNames.slice(0,-1).forEach((name,i)=>{const ts=act.filter(t=>t.phase===name);L.push({id:'ph'+i,icon:icons[i%4],title:phaseShortName(name)+' complete',on:ts.length>0&&ts.every(isDone)})});
+  L.push({id:'half',icon:'spark',title:'Halfway there',on:s.completion>=50},{id:'marks',icon:'target',title:'All module pass marks met',on:s.modulesMet===s.modules.length&&s.modules.length>0},{id:'cert',icon:'star',title:LEVEL.certified,on:s.effective==='certified'});
+  return L;
+}
+function detectChanges(){
+  if(!D||D.me.role!=='Trainee'||!D.trainees[0])return;
+  const tr=D.trainees[0],key=D.config.storagePrefix+':seen:'+D.me.email,badges=milestones(tr),now={s:{},lv:tr.stats.effective,b:badges.filter(b=>b.on).map(b=>b.id)};let prev=null;
+  try{prev=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
+  D.tasks.forEach(t=>{if(t.active)now.s[t.id]=P(tr,t.id).status});
+  try{localStorage.setItem(key,JSON.stringify(now))}catch(e){}
+  if(!prev)return;   // first visit on this device: nothing to compare with
+  const ch=[];let party=false,big=false;
+  D.tasks.forEach(t=>{
+    if(!t.active)return;const a=prev.s[t.id]||'not',b=now.s[t.id];if(a===b)return;
+    const p=P(tr,t.id),name=`<b>${esc(t.id)} ${esc(t.name)}</b>`,fb=p.feedback?` &ldquo;${esc(p.feedback.slice(0,140))}${p.feedback.length>140?'…':''}&rdquo;`:'';
+    if(b==='complete'||b==='exempt'){ch.push({k:'good',i:'check',h:`${name} was marked ${STATUS[b].toLowerCase()}${p.score?' ('+p.score+' of 4, '+SCALE[p.score]+')':''}.${fb}`});party=true}
+    else if(b==='partial')ch.push({k:'warn',i:'spark',h:`${name} needs a reattempt after feedback.${fb}`});
+    else if(b==='rework')ch.push({k:'bad',i:'refresh',h:`${name} is not yet met${p.critical?' (critical error)':''}.${fb}`});
+  });
+  if(now.lv==='certified'&&prev.lv!=='certified'){ch.unshift({k:'star',i:'star',h:`You are now <b>${esc(LEVEL.certified.toLowerCase())}</b>.`});big=true}
+  if(prev.b)badges.filter(b=>b.on&&!prev.b.includes(b.id)).forEach(b=>{NEWBADGES.add(b.id);ch.push({k:'star',i:'star',h:`You earned the <b>${esc(b.title)}</b> medal.`});party=true});
+  CHANGES=ch.length?ch:null;
+  if(big)celebrate(true);else if(party)celebrate(false);
+}
+const changesCard=()=>`<section class="changes" aria-label="Since you last visited"><div class="hd"><h3>${ico('spark')} Since you last visited</h3><button class="btn ghost small" data-act="dismiss-changes">Dismiss</button></div><ul>${CHANGES.map(c=>`<li class="${c.k}"><span class="badge">${ico(c.i,14)}</span><span>${c.h}</span></li>`).join('')}</ul></section>`;
+const pageBanner=(title,sub)=>`<section class="banner">${HERO_BG}<span class="accent-bar"></span><span class="accent-dot"></span><h1>${esc(title)}</h1>${sub?`<p class="hero-sub">${esc(sub)}</p>`:''}</section>`;
+const stat=(n,suffix,icon,label)=>`<div class="stat"><div class="gnum">${n==null?'&ndash;':`<span data-count="${n}">${n}</span>`}<small>${suffix}</small></div><div class="uline"></div><div class="slab">${ico(icon,22)}<span>${label}</span></div></div>`;
+const initials=n=>String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+function tilesHtml(list){return`<div class="tiles">${list.map(([ic,n,l,k])=>`<div class="tile ${k||''}"><span class="ti">${ico(ic,22)}</span><div><div class="tn" data-count="${n}">${n}</div><div class="tl">${l}</div></div></div>`).join('')}</div>`}
+
+/** Module text from the Google Doc, loaded on demand and cached for this visit. */
+function docBox(title,label){
+  if(!title)return'';
+  const open=OPENDOC.has(title),d=DOCS[title];
+  const body=!open?'':!d?'<p class="hint">Loading…</p>':d.found?`<div class="docbody">${d.html}</div>`:'<p class="note amber">This section is not in the app yet. An admin can press &ldquo;Refresh from the doc&rdquo; in Curriculum.</p>';
+  return`<div class="kv"><h4>${label||'Module text'}</h4><button class="btn ghost small" data-act="doc" data-title="${esc(title)}" aria-expanded="${open}">${open?'Hide':'Read it here'}</button>${body}</div>`;
+}
+async function toggleDoc(title){
+  if(OPENDOC.has(title)){OPENDOC.delete(title);render();return}
+  OPENDOC.add(title);render();
+  if(!DOCS[title]){try{DOCS[title]=await call('getContent',title)}catch(e){OPENDOC.delete(title);toast((e&&e.message)||String(e),true)}render()}
+}
+</script>

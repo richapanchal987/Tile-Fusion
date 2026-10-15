@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<title><?= appName ?></title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<?!= include_('Styles') ?>
+<?!= include_('Styles2') ?>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<?!= include_('Art') ?>
+<?!= include_('AppCore') ?>
+<?!= include_('AppTrainee') ?>
+<?!= include_('AppAssess') ?>
+<?!= include_('AppTeam') ?>
+<?!= include_('AppAdmin') ?>
+<?!= include_('AppFiles') ?>
+<?!= include_('AppEvents') ?>
+</body>
+</html>

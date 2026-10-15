@@ -1,0 +1,113 @@
+<script>
+'use strict';
+/* Clicks, typing and the first load. */
+const checked=n=>Array.from(document.querySelectorAll(`input[name="${n}"]:checked`)).map(x=>x.value);
+const val=id=>{const e=document.getElementById(id);return e?e.value:''};
+const clearDrafts=(tr,id)=>Object.keys(DRAFT).forEach(k=>{if(k.startsWith(tr+'|'+id+'|'))delete DRAFT[k]});
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  if(a==='archived'){UI.archived=b.checked;render();return}
+  if(b.tagName!=='BUTTON')return;
+  const ds=b.dataset,form=b.closest('.myform')||b.closest('.assessform')||b.closest('.planbox');
+  switch(a){
+    case'view':UI.view=ds.v;UI.cycle=null;render();break;
+    case'cycle':UI.cycle=+ds.c;render();break;
+    case'open':UI.tid=ds.id;UI.view='trainee';UI.cycle=null;render();break;
+    case'export-tracker':exportTracker(T(UI.tid));break;
+    case'export-team':exportTeam();break;
+    case'doc':toggleDoc(ds.title);break;
+    case'sync':run('refreshModuleText',[],'Module text refreshed from the doc','Reading the doc. This can take a minute.');break;
+    case'save':case'submit':{
+      const id=form.dataset.t,ev=$('[data-f=evidence]',form).value,rf=$('[data-f=reflection]',form).value;
+      if(a==='submit'&&!ev.trim()&&!(P(T(UI.tid),id).files||[]).length){toast('Add a link, reference or file as evidence before submitting.',true);return}
+      openSet.add(UI.tid+'|'+id);
+      run('saveMyTask',[id,a,ev,rf],a==='submit'?'Submitted for review':'Draft saved',null,()=>{delete DRAFT[dk(UI.tid,id,'evidence')];delete DRAFT[dk(UI.tid,id,'reflection')]});break}
+    case'checklist':{
+      const f=b.closest('.checkform'),id=f.dataset.t;
+      openSet.add(UI.tid+'|'+id);
+      run('saveChecklist',[id,$('[data-cl=code]',f).value,Array.from(f.querySelectorAll('[data-cl=item]')).map(x=>x.checked)],'Checklist saved');break}
+    case'rmfile':openSet.add(UI.tid+'|'+ds.t);run('removeEvidence',[ds.t,ds.fid],'File removed');break;
+    case'openfile':openFile(ds.tr,ds.t,ds.fid);break;
+    case'viewfile':toggleViewer(ds.tr,ds.t,ds.fid);break;
+    case'rvfilter':UI.rvFilter=ds.id||null;render();break;
+    case'dismiss-changes':CHANGES=null;render();break;
+    case'goto':{UI.cycle=+ds.c;openSet.add(UI.tid+'|'+ds.t);render();const el=document.querySelector(`[data-key="${CSS.escape(UI.tid+'|'+ds.t)}"]`);if(el)el.scrollIntoView({block:'center',behavior:REDUCED?'auto':'smooth'});break}
+    case'assess':{
+      const tr=form.dataset.tr,id=form.dataset.t,s=readAssess(form),criteria={};
+      Object.keys(s.vals).forEach(k=>{if(k!=='single')criteria[k]=+s.vals[k]});
+      openSet.add(tr+'|'+id);
+      run('assessTask',[tr,id,{criteria:criteria,score:s.vals.single?+s.vals.single:'',exempt:s.exempt,critical:{type:s.critical},feedback:$('[data-f=feedback]',form).value}],'Assessment saved',null,()=>clearDrafts(tr,id));break}
+    case'plan':openSet.add(form.dataset.tr+'|'+form.dataset.t);run('setTaskPlan',[form.dataset.tr,form.dataset.t,$('[data-plan=due]',form).value,$('[data-plan=ai]',form).value],'Plan saved');break;
+    case'grant':openSet.add(ds.tr+'|'+ds.t);run('grantReattempt',[ds.tr,ds.t],'Another reattempt allowed');break;
+    case'certify':run('confirmCertification',[UI.tid,ds.lv,val('rd-note')],ds.lv==='notcertified'?'Certification withdrawn':D.config.levels.certified.label+' confirmed',null,()=>{if(ds.lv==='certified')celebrate(true)});break;
+    case'enrol':run('enrolTrainee',[val('nt-name'),val('nt-email'),readPeople('nt'),val('nt-start')],WD.Trainee+' enrolled');break;
+    case'edit-trainee':UI.editTrainee=ds.id;render();{const p=document.getElementById('et');if(p)p.scrollIntoView({block:'center'})}break;
+    case'trainee-cancel':UI.editTrainee=null;render();break;
+    case'trainee-save':run('updateTrainee',[UI.editTrainee,Object.assign({name:val('et-name'),start:val('et-start'),active:document.getElementById('et-active').checked},(p=>({mentors:p.mentors,tl:p.tl,certifier:p.certifier}))(readPeople('et')))],'Saved',null,()=>{UI.editTrainee=null});break;
+    case'staff-add':run('saveStaff',[val('sf-email'),val('sf-name'),val('sf-role'),document.getElementById('sf-cert').checked],'Staff member saved');break;
+    case'staff-remove':if(confirm('Remove '+ds.email+' from the staff list?'))run('removeStaff',[ds.email],'Removed');break;
+    case'log':call('getActivityLog').then(l=>{UI.log=l;render()}).catch(er=>toast(er.message,true));break;
+    case'ph-add':PH.push({name:'',old:''});render();break;
+    case'ph-del':PH.splice(+ds.i,1);render();break;
+    case'settings-save':run('saveSettings',[SET,PH],'Settings saved',null,()=>{SET=null;PH=null});break;
+    case'topic-edit':{const t=D.topics.find(x=>x.id===+ds.id);UI.editTopic=t.id;UI.tpf={id:t.id,name:t.name,w:t.w,need:t.need,phase:t.phase,doc:t.doc||'',note:t.note};render();break}
+    case'topic-new':UI.editTopic='new';UI.tpf={name:'',w:0,need:60,phase:D.config.phaseNames[0],doc:'',note:''};render();break;
+    case'topic-cancel':UI.editTopic=null;render();break;
+    case'topic-save':run('saveTopic',[Object.assign({},UI.tpf,{id:UI.editTopic==='new'?'':UI.editTopic})],'Module saved',null,()=>{UI.editTopic=null});break;
+    case'task-edit':{const t=D.tasks.find(x=>x.id===ds.id);UI.editTask=t.id;UI.rubTask=null;UI.tf=Object.assign({},t);render();break}
+    case'task-new':{const tp=+ds.topic,ns=D.tasks.filter(t=>t.topic===tp).map(t=>+String(t.id).split('.')[1]||0);
+      UI.editTask='new:'+tp;UI.rubTask=null;UI.tf={id:tp+'.'+((ns.length?Math.max(...ns):0)+1),name:'',topic:tp,cycle:1,type:D.config.taskTypes[1],weight:1,gate:false,real:false,students:0,ai:'ask',doc:'',what:'',standard:'',evidence:''};render();break}
+    case'task-cancel':UI.editTask=null;UI.tf=null;render();break;
+    case'task-save':{const isNew=UI.editTask.startsWith('new:');run('saveTask',[UI.tf,isNew],'Task saved',null,()=>{UI.editTask=null;UI.tf=null});break}
+    case'task-archive':run('setTaskActive',[ds.id,false],'Task archived');break;
+    case'task-restore':run('setTaskActive',[ds.id,true],'Task restored');break;
+    case'rub-edit':UI.rubTask=ds.id;UI.editTask=null;UI.rub=D.rubrics.filter(r=>r.task===ds.id).map(r=>Object.assign({},r,{levels:r.levels.slice()}));render();break;
+    case'rub-add':UI.rub.push({group:'',criterion:'',evaluated:'',levels:['','','',''],use:'score'});render();break;
+    case'rub-del':UI.rub.splice(+ds.i,1);render();break;
+    case'rub-cancel':UI.rubTask=null;UI.rub=null;render();break;
+    case'rub-save':run('saveRubric',[UI.rubTask,UI.rub],'Rubric saved',null,()=>{UI.rubTask=null;UI.rub=null});break;
+    case'res-add':RES[ds.scope].push({label:'',url:'',note:''});render();break;
+    case'res-del':RES[ds.scope].splice(+ds.i,1);render();break;
+    case'res-save':run('saveResources',[+ds.topic,ds.task,RES[ds.scope]],'Resources saved',null,()=>{delete RES[ds.scope]});break;
+  }
+});
+
+document.addEventListener('input',e=>{
+  const el=e.target,ds=el.dataset;
+  if(ds.f){const box=el.closest('.myform')||el.closest('.assessform');if(box&&(ds.f==='evidence'||ds.f==='reflection'||ds.f==='feedback'))DRAFT[dk(box.dataset.tr,box.dataset.t,ds.f)]=el.value}
+  if(ds.set!=null)SET[ds.set]=el.value;
+  if(ds.ph!=null)PH[+ds.ph][ds.pf]=el.value;
+  if(ds.tpf)UI.tpf[ds.tpf]=el.value;
+  if(ds.tf)UI.tf[ds.tf]=el.type==='checkbox'?el.checked:(['topic','cycle','students'].includes(ds.tf)?+el.value:el.value);
+  if(ds.rs)RES[ds.rs][+ds.i][ds.rf]=el.value;
+  if(ds.rb!=null){const r=UI.rub[+ds.rb];if(ds.rl!=null)r.levels[+ds.rl]=el.value;else r[ds.rf]=el.value}
+});
+
+document.addEventListener('change',async e=>{
+  const el=e.target,ds=el.dataset;
+  if(ds.act==='pick'){UI.tid=el.value;UI.cycle=null;render();return}
+  if(ds.tf==='real'||ds.tf==='gate'){UI.tf[ds.tf]=el.checked;if(ds.tf==='real'&&el.checked&&!UI.tf.students)UI.tf.students=1;render();return}
+  if(ds.tpf==='phase'){UI.tpf.phase=el.value;return}
+  if(ds.f&&el.closest('.assessform')){
+    const form=el.closest('.assessform'),tr=form.dataset.tr,id=form.dataset.t;
+    if(ds.f==='crit')DRAFT[dk(tr,id,'c'+ds.o)]=el.value;
+    else if(ds.f==='score')DRAFT[dk(tr,id,'score')]=el.value;
+    else if(ds.f==='exempt')DRAFT[dk(tr,id,'exempt')]=el.checked?'1':'0';
+    else if(ds.f==='critical'){DRAFT[dk(tr,id,'critical')]=el.value;openSet.add(tr+'|'+id);render();return}
+    refreshSummary(form);return;
+  }
+  if(ds.staffrole){const s=(D.staff||[]).find(x=>x.email===ds.staffrole)||{};run('saveStaff',[ds.staffrole,ds.name,el.value,!!s.certifies],'Role updated');return}
+  if(ds.staffcert){run('saveStaff',[ds.staffcert,ds.name,ds.role,el.checked],'Saved');return}
+  if(ds.up!=null){
+    const file=el.files[0];if(!file)return;
+    if(file.size>D.config.maxUploadMb*1048576){toast('That file is larger than '+D.config.maxUploadMb+' MB. Share a link instead.',true);el.value='';return}
+    try{const b64=await readB64(file);openSet.add(UI.tid+'|'+ds.up);run('uploadEvidence',[ds.up,file.name,file.type||'application/octet-stream',b64],'File attached','Uploading…')}
+    catch(er){toast(er.message,true)}
+  }
+});
+document.addEventListener('toggle',e=>{const d=e.target;if(d.matches&&d.matches('details[data-key]')){d.open?openSet.add(d.dataset.key):openSet.delete(d.dataset.key)}},true);
+
+render();
+call('getBootstrap').then(d=>{setData(d);detectChanges();render()}).catch(e=>{$('#app').innerHTML=`<div class="center"><h2>The app couldn't load</h2><p class="muted">${esc((e&&e.message)||e)}</p></div>`});
+</script>

@@ -1,0 +1,193 @@
+<script>
+'use strict';
+/* The trainee's home: scoreboard, certification, pass marks, cycle path and the task cards. */
+const paceGap=tr=>tr.stats.completion-tr.stats.expectedPct;
+const paceState=tr=>{const s=tr.stats;if(s.calendarState==='unknown'||s.calendarState==='notstarted')return s.calendarState;if(s.finished)return'done';const g=paceGap(tr);return g<-10?'behind':g>10?'ahead':'on'};
+const pts=n=>Math.abs(n)+' point'+(Math.abs(n)===1?'':'s');
+function paceChip(tr){
+  const st=paceState(tr),g=paceGap(tr),tip='Compares completion with where the calendar says the work should be by today.';
+  if(st==='unknown')return`<span class="chip warn">No start date set</span>`;
+  if(st==='notstarted')return`<span class="chip">Starts ${fmtDate(tr.start)}</span>`;
+  if(st==='done')return`<span class="chip good">All cycles worked through</span>`;
+  if(st==='behind')return`<span class="chip warn" title="${tip}">${pts(g)} behind the calendar</span>`;
+  if(st==='ahead')return`<span class="chip good" title="${tip}">${pts(g)} ahead of the calendar</span>`;
+  return`<span class="chip good" title="${tip}">On track with the calendar</span>`;
+}
+
+/** Certification: what is left, who confirms, and the confirm / withdraw buttons for the people who may use them. */
+function certCard(tr){
+  const s=tr.stats,lv=s.effective,lines=[],staff=isStaff(),who=tr.certifierName||WD.certifier;
+  if(lv==='certified')lines.push(`${D.config.levels.certified.label}. Confirmed by ${esc(tr.confirmedBy)}, ${fmtDate(tr.confirmedAt)}.${tr.confirmNote?' '+esc(tr.confirmNote):''}`);
+  else if(s.needsReview)lines.push(`Certification on record needs review: ${esc(s.blockers[0]||'something no longer meets the requirements')}`);
+  else if(s.eligible==='certified')lines.push(`Everything needed is in place. Waiting for ${esc(who)} to confirm.`);
+  else{
+    lines.push(`Still needed before ${esc(WD.certifier)} can certify:`);
+    s.blockers.slice(0,4).forEach(b=>lines.push('&bull; '+esc(b)));
+    if(s.blockers.length>4)lines.push(`&hellip; and ${s.blockers.length-4} more.`);
+  }
+  let ctl='';
+  if(staff){
+    const b=[];
+    if(s.eligible==='certified'&&lv!=='certified'&&isCertifier())b.push(`<button class="btn small" data-act="certify" data-lv="certified">Confirm ${esc(D.config.levels.certified.label)}</button>`);
+    if(s.eligible==='certified'&&lv!=='certified'&&!isCertifier())b.push(`<span class="hint">Only a ${esc(WD.certifier)} confirms certification.</span>`);
+    if(lv==='certified'&&(isCertifier()||isAdmin()))b.push(`<button class="btn small danger" data-act="certify" data-lv="notcertified">Withdraw certification</button>`);
+    if(b.length)ctl=`<div class="field"><input type="text" id="rd-note" placeholder="Note (optional)" aria-label="Note for this decision"></div><div class="row">${b.join('')}</div>`;
+  }
+  return`<div class="ready ${lv}" role="status"><h2>${ico(lv==='certified'?'star':'shield',20)} ${esc(LEVEL[lv])}</h2>${lines.map(l=>`<p>${l}</p>`).join('')}${ctl}</div>`;
+}
+
+function passMarksCard(tr){
+  const s=tr.stats;
+  return`<div class="card"><h3>${ico('target')} Module pass marks <span class="hint">${s.modulesMet} of ${s.modules.length} met</span></h3>
+    <ul class="mods">${s.modules.map(m=>`<li class="${m.met?'met':''}"><span class="mn">${m.id}. ${esc(topicOf(m.id).name)}</span><div class="mod" role="img" aria-label="${m.pct} percent, pass mark ${m.need} percent"><i style="width:${Math.min(100,m.pct)}%"></i><u style="left:${m.need}%"></u></div><b>${m.pct}%<small> / ${m.need}%</small></b></li>`).join('')}</ul>
+    <p class="hint">Each module needs its pass mark (the line) before ${esc(WD.certifier)} can certify you. A module's percentage is the score out of 4 on each of its tasks, weighted, with work not yet assessed counting as zero.</p></div>`;
+}
+
+function dueCard(tr){
+  const items=D.tasks.filter(t=>t.active&&dueState(P(tr,t.id))).map(t=>[t,P(tr,t.id)]).sort((a,b)=>a[1].due.localeCompare(b[1].due)).slice(0,6);
+  if(!items.length)return`<div class="card"><h3>${ico('calendar')} Deadlines</h3><p class="hint">No deadlines set yet. Your mentor or TL agrees a date with you for each task. Training ends ${fmtDate(tr.end)}.</p></div>`;
+  return`<div class="card"><h3>${ico('calendar')} Deadlines</h3><ul class="nextup">${items.map(([t,p])=>`<li><button data-act="goto" data-c="${t.cycle}" data-t="${esc(t.id)}" style="${pcv(t.cycle)}">${ico('calendar',18)}<b>${esc(t.id)} ${esc(t.name)}</b><small class="due-${dueState(p)}">${dueText(p)}</small></button></li>`).join('')}</ul><p class="hint">Training ends ${fmtDate(tr.end)}.</p></div>`;
+}
+
+function pathHtml(tr,cyc){
+  const s=tr.stats,N=D.config.cycles,starts=new Set(D.config.phases.map(p=>p.from)),cal=tr.cal||[];
+  let h='';
+  for(let c=1;c<=N;c++){
+    const f=s.fractions[c-1]||0,cd=cal[c-1],now=s.calendarState==='active'&&s.expected===c,here=!s.finished&&s.current===c;
+    h+=`<button class="node ${c===1?'first':''} ${c===cyc?'sel':''} ${f>=1?'full':''} ${here?'here':''} ${c>1&&(s.fractions[c-2]||0)>=1?'done':''}" data-act="cycle" data-c="${c}" aria-label="${WD.Cycle} ${c}, ${Math.round(f*100)} percent done${cd?', '+fmtShort(cd.start)+' to '+fmtShort(cd.end):''}" aria-pressed="${c===cyc}" style="--f:${f*360}deg;${pcv(c)}">
+      <span class="dot"><span>${f>=1?ico('check',18):c}</span></span><span class="cl">${starts.has(c)?esc(phaseShort(c)):''}</span><span class="cd">${cd?fmtShort(cd.start):''}</span><span class="now" ${now?'':'style="visibility:hidden"'}>Today</span></button>`;
+    if(c===N)h+=`<div class="gatemark ${s.effective==='certified'?'open':''}"><div class="bar">${ico('flag',16)}</div><span>${esc(D.config.levels.certified.short)}</span></div>`;
+  }
+  return h;
+}
+
+const nextUp=tr=>D.tasks.filter(t=>t.active&&!FINISHED.includes(P(tr,t.id).status)).slice(0,3);
+const peopleLine=(tr,sep)=>[tr.assessorNames.length?WD.mentor+': '+tr.assessorNames.map(esc).join(', '):'',tr.tlName?'TL: '+esc(tr.tlName):'',tr.certifierName?WD.certifier+': '+esc(tr.certifierName):''].filter(Boolean).join(sep||' · ')||'No mentor, TL or '+esc(WD.certifier.toLowerCase())+' assigned yet';
+
+function vTrainee(){
+  const tr=T(UI.tid);
+  if(!tr)return`${pageBanner(WD.Trainee,'No '+WD.trainees+' yet')}<div class="empty" style="margin-top:24px">${emptyArt('seed')}<h3>No ${WD.trainees} yet</h3><p>${isAdmin()?'Enrol one from the Team tab.':'A '+WD.trainee+' will appear here once an admin enrols them.'}</p></div>`;
+  const s=tr.stats,cyc=UI.cycle||s.current,cd=(tr.cal||[])[cyc-1];
+  const tasks=D.tasks.filter(t=>t.cycle===cyc&&t.active);
+  const mine=D.me.role==='Trainee'&&tr.id===D.me.email;
+  const cycTasks=D.tasks.filter(t=>t.cycle===s.current&&t.active),cycDone=cycTasks.filter(t=>['complete','exempt'].includes(P(tr,t.id).status)).length;
+  const subj=mine?"You're":"They're",nu=nextUp(tr),diff=s.completion-s.expectedPct,ms=milestones(tr);
+  const hint=s.calendarState==='unknown'?'No start date has been set.':s.calendarState==='notstarted'?`Training starts ${fmtDate(tr.start)}.`:diff===0?'Right on the calendar.':`${Math.abs(diff)} percentage point${Math.abs(diff)===1?'':'s'} ${diff>0?'ahead of':'behind'} the calendar.`;
+  return`
+  <section class="hero2">${HERO_BG}<span class="accent-bar"></span><span class="accent-dot"></span>
+    <div>
+      <p class="eyebrow">${mine?greeting():WD.Trainee}</p>
+      <h1>${esc(tr.name)}</h1>
+      <p class="hero-sub">${s.finished?`${mine?'You have':'They have'} worked through every ${WD.cycle}.`:`${subj} in ${WD.cycle} ${s.current}, ${esc(phaseShort(s.current))}: ${cycDone} of ${cycTasks.length} tasks complete.`}</p>
+      <div class="chips">${paceChip(tr)}<span class="chip">Joined ${fmtDate(tr.start)}</span><span class="chip">Ends ${fmtDate(tr.end)}</span><span class="chip ${s.modulesMet===s.modules.length?'good':''}">Pass marks met: ${s.modulesMet} of ${s.modules.length}</span>${s.openCritical.length?`<span class="chip bad">Critical error to reattempt: ${esc(s.openCritical.join(', '))}</span>`:''}</div>
+      <p class="people">${peopleLine(tr)}</p>
+      <div class="hero-actions"><button class="btn ghost small" data-act="export-tracker">Download tracker (CSV)</button></div></div>
+    <div class="board"><div class="stats">${stat(s.completion,'/100','user',(mine?'Your':'Their')+'<br>completion')}${stat(s.expectedPct,'/100','calendar','Calendar<br>expects')}</div><p class="hint">${hint}</p></div>
+    ${certCard(tr)}
+  </section>
+  ${mine&&CHANGES?changesCard():''}
+  <section class="badges" aria-label="Milestones"><h3>${ico('star')} Milestones <span class="hint">${ms.filter(m=>m.on).length} of ${ms.length}</span></h3><ul class="medals">${ms.map(m=>`<li class="medalitem ${m.on?'on':'off'} ${NEWBADGES.has(m.id)&&mine?'new':''}">${medal(m.icon,m.on)}<span class="mt">${esc(m.title)}</span><small>${m.on?'Earned':'Locked'}</small></li>`).join('')}</ul></section>
+  <div class="pathwrap"><div class="path">${pathHtml(tr,cyc)}</div></div>
+  <div class="cols">
+    <section><div class="sechead" style="${pcv(cyc)}"><h2>${WD.Cycle} ${cyc}</h2><span class="muted">${esc(phaseOf(cyc))}${cd?', '+fmtShort(cd.start)+' to '+fmtShort(cd.end):''}, ${tasks.length} task${tasks.length===1?'':'s'}</span></div>
+      ${tasks.map(t=>taskCard(tr,t,mine)).join('')||'<div class="empty">No tasks in this '+WD.cycle+'.</div>'}</section>
+    <aside>
+      ${passMarksCard(tr)}
+      <div class="card"><div class="stats">${stat(s.competency,'/100','star','Competency')}${stat(s.gatesPassed,'/'+s.gatesTotal,'shield','Gates passed')}</div><p class="hint">Competency is the weighted average score of assessed tasks. A high percentage cannot make up for a critical gate that is not passed.</p></div>
+      ${dueCard(tr)}
+      ${nu.length?`<div class="card"><h3>${ico('target')} Next up</h3><ul class="nextup">${nu.map(t=>`<li><button data-act="goto" data-c="${t.cycle}" data-t="${esc(t.id)}" style="${pcv(t.cycle)}">${ico(TYPE_ICON[t.type]||'target',18)}<b>${esc(t.id)} ${esc(t.name)}</b><small>${WD.Cycle} ${t.cycle}${t.gate?', critical gate':''}</small></button></li>`).join('')}</ul></div>`:''}
+      <div class="card"><details ${openSet.has('gates')?'open':''} data-key="gates"><summary>Critical gates: ${s.gatesPassed} of ${s.gatesTotal}</summary><ul class="gl">${s.gates.map(g=>`<li class="${g.state}"><span class="ic2" aria-hidden="true"></span><span>${esc(g.id)} ${esc(g.name)}<small>${g.state==='pass'?'Passed':g.state==='attention'?'Needs another attempt':WD.Cycle+' '+g.cycle}</small></span></li>`).join('')}</ul></details></div>
+    </aside>
+  </div>`;
+}
+
+/* ---------- evidence ---------- */
+function filesHtml(tr,t,p,canRemove){
+  if(!(p.files||[]).length)return'';
+  return`<ul class="files">${p.files.map(f=>{const on=VIEWING.has(f.id),a=`data-tr="${esc(tr.id)}" data-t="${esc(t.id)}" data-fid="${esc(f.id)}"`;
+    return`<li><div class="filerow"><span>${esc(f.name)} <span class="hint">${mb(f.size)}</span></span><button class="btn small" data-act="viewfile" ${a} aria-expanded="${on}">${on?'Hide':'View'}</button><button class="btn ghost small" data-act="openfile" ${a}>Download</button>${canRemove?`<button class="btn ghost small" data-act="rmfile" data-t="${esc(t.id)}" data-fid="${esc(f.id)}">Remove</button>`:''}</div><div class="viewer" data-viewer="${esc(f.id)}" ${on?'':'hidden'}></div></li>`}).join('')}</ul>`;
+}
+function evidenceView(tr,t,p){
+  const link=p.evidence?(isUrl(p.evidence)?`<a href="${esc(p.evidence)}" target="_blank" rel="noopener">${esc(p.evidence)}</a>`:esc(p.evidence)):'';
+  if(!link&&!(p.files||[]).length)return'<p class="hint">No evidence added.</p>';
+  return`${link?`<p>${link}</p>`:''}${filesHtml(tr,t,p,false)}`;
+}
+
+/* ---------- rubric, consent checklist, task plan ---------- */
+const levelHelp=n=>`<li><b>${n} ${esc(SCALE[n])}</b> ${esc(D.config.scaleHelp[n])}</li>`;
+function rubricView(t){
+  const rows=D.rubrics.filter(r=>r.task===t.id);
+  if(!rows.length)return`<p>${esc(t.standard)}</p>`;
+  const groups=[],by={};
+  rows.forEach(r=>{const k=r.use+'|'+r.group;if(!by[k]){by[k]={use:r.use,group:r.group,rows:[]};groups.push(by[k])}by[k].rows.push(r)});
+  const crit=r=>`<div class="crit"><b>${esc(r.criterion)}</b>${r.evaluated?`<p class="hint">${esc(r.evaluated)}</p>`:''}${r.levels.some(Boolean)?`<ul class="lvl">${r.levels.map((x,i)=>`<li><b>${i+1}</b> ${esc(x||'')}</li>`).join('')}</ul>`:''}</div>`;
+  const body=groups.map((g,i)=>{
+    const head=g.use==='reference'?g.group+' (not used for scoring)':g.group,k='rg|'+t.id+'|'+i;
+    return head?`<details class="rgroup" data-key="${esc(k)}" ${openSet.has(k)?'open':''}><summary>${esc(head.length>110?head.slice(0,107)+'…':head)}</summary>${head.length>110?`<p class="hint">${esc(head)}</p>`:''}${g.rows.map(crit).join('')}</details>`:g.rows.map(crit).join('');
+  }).join('');
+  const n=rows.filter(r=>r.use==='score').length,k='rub|'+t.id;
+  return`<details class="rubric" data-key="${esc(k)}" ${openSet.has(k)?'open':''}><summary>${n} criteri${n===1?'on':'a'}, scored 1 to 4</summary><ul class="lvl generic">${[4,3,2,1].map(levelHelp).join('')}</ul>${body}<p class="hint">The task score is the average of the criterion scores, rounded up at .5.${t.gate?` A critical gate needs ${D.config.passScore} or more.`:''}</p></details>`;
+}
+
+function checklistBox(tr,t,mine,editable){
+  if(!t.real)return'';
+  const need=Math.max(1,t.students),done=tr.lists.filter(c=>c.task===t.id),ck=D.config.checklist;
+  const form=mine&&editable?`<div class="myform checkform" data-t="${esc(t.id)}"><p class="hint">${esc(ck.intro)}</p>
+    <div class="field"><label for="cl-${slug(t.id)}">Student code (for example ${esc(ck.codeExample)})</label><input type="text" id="cl-${slug(t.id)}" data-cl="code" placeholder="${esc(ck.codeExample)}" autocomplete="off"></div>
+    ${ck.groups.map((g,gi)=>`<fieldset class="clgroup"><legend>${esc(g[0])}</legend>${g[1].map((x,xi)=>`<label class="clitem"><input type="checkbox" data-cl="item"> <span>${esc(x)}</span></label>`).join('')}</fieldset>`).join('')}
+    <div class="row"><button class="btn small" data-act="checklist">Save checklist for this student</button></div></div>`:'';
+  return`<div class="kv"><h4>${esc(ck.title)}</h4><p class="${done.length>=need?'':'warnline'}">${done.length} of ${need} student${need===1?'':'s'} done${done.length?': '+done.map(c=>`<span class="code">${esc(c.code)}</span>`).join(' '):''}. ${done.length>=need?'You can submit this task.':'Complete this before the task begins; it is needed before you can submit.'}</p>${form}</div>`;
+}
+
+function planBox(tr,t,p){
+  const k=p.ai||'',sl=slug(tr.id+'_'+t.id);
+  return`<div class="planbox" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}"><h4>Agree the plan for this task</h4>
+    <div class="formgrid"><div class="field"><label for="pd-${sl}">Due date</label><input type="date" id="pd-${sl}" data-plan="due" value="${esc(p.due||'')}"></div>
+    <div class="field"><label for="pa-${sl}">AI tools</label><select id="pa-${sl}" data-plan="ai"><option value="" ${k===''?'selected':''}>Task default: ${esc(D.config.aiOptions[t.ai||'ask'][0])}</option>${Object.keys(D.config.aiOptions).map(a=>`<option value="${a}" ${k===a?'selected':''}>${esc(D.config.aiOptions[a][0])}</option>`).join('')}</select></div></div>
+    <div class="row"><button class="btn small" data-act="plan">Save plan</button><span class="hint">${esc(WD.trainee)} sees the date and the AI setting on the task.</span></div></div>`;
+}
+
+/* ---------- the task card ---------- */
+function taskCard(tr,t,mine){
+  const p=P(tr,t.id),res=resFor(t),key=tr.id+'|'+t.id,staff=isStaff(),sl=slug(key),ds=dueState(p),ak=aiKey(t,p);
+  const editable=['not','progress','partial','rework'].includes(p.status);
+  const left=1+D.config.reattempts+(p.extra||0)-(p.failed||0);
+  const need=t.real?Math.max(1,t.students):0,listsOk=tr.lists.filter(c=>c.task===t.id).length>=need;
+  let block='';
+  const fb=p.feedback?`<b>${p.assessor?esc(p.assessor)+':':'Feedback:'}</b> ${esc(p.feedback)}`:'';
+  if(p.status==='complete'||p.status==='exempt')block+=`<div class="note green"><b>${STATUS[p.status]}${p.score?', '+p.score+' of 4, '+esc(SCALE[p.score]):''}.</b> ${fb}<br><span class="hint">${p.date?fmtDate(p.date):''}</span></div>`;
+  if(p.critical)block+=`<div class="note red"><b>Critical error: ${esc(p.critical)}.</b> The task is not yet met whatever the score. Have the remediation conversation with your TL, then reattempt. ${fb}</div>`;
+  else if(p.status==='partial'||p.status==='rework')block+=`<div class="note ${p.status==='rework'?'red':'amber'}"><b>${STATUS[p.status]}${p.score?', '+p.score+' of 4, '+esc(SCALE[p.score]):''}.</b> ${fb}</div>`;
+  if((p.status==='partial'||p.status==='rework')&&mine)block+=`<p class="${left>0?'hint':'warnline'}">${left>0?`You can reattempt this task ${left===1?'once':left+' times'} more.`:'You have used the reattempts allowed. Talk to your TL or mentor; an admin can allow another.'}</p>`;
+  if(p.status==='submitted')block+=`<div class="note"><b>Submitted${p.submitted?' '+fmtDate(p.submitted):''}. Waiting for review.</b></div>`;
+  if(mine&&editable){
+    const ev=dv(tr.id,t.id,'evidence',p.evidence||''),rf=dv(tr.id,t.id,'reflection',p.reflection||''),blocked=!listsOk||left<=0;
+    block+=`<div class="myform" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}" style="display:grid;gap:12px">
+      <div class="field"><label for="ev-${sl}">Link or reference to your evidence</label><input type="text" id="ev-${sl}" data-f="evidence" value="${esc(ev)}" placeholder="A restricted Drive link, or a Nucleus reference"></div>
+      ${filesHtml(tr,t,p,true)}
+      <div class="filepick"><input type="file" id="up-${sl}" data-up="${esc(t.id)}"><label class="btn ghost small" for="up-${sl}">Attach a file</label> <span class="hint">PDF, Word (.docx), image, text, mp3, m4a or mp4 can be viewed directly in the app; other Office files can only be downloaded, so a PDF is best. Up to ${D.config.maxUploadMb} MB each, ${D.config.maxFiles} files. For anything larger, paste a link.</span></div>
+      <div class="field"><label for="rf-${sl}">Reflection (optional)</label><textarea id="rf-${sl}" data-f="reflection" placeholder="What went well, what you would do differently, what you are unsure about">${esc(rf)}</textarea><span class="hint">Never write a student's name or details that identify them. Use the student code, for example ${esc(D.config.checklist.codeExample)}.</span></div>
+      <div class="row"><button class="btn ghost" data-act="save">Save draft</button><button class="btn" data-act="submit" ${blocked?'disabled':''}>Submit for review</button>${!listsOk?'<span class="hint">Complete the consent checklist above first.</span>':left<=0?'<span class="hint">No reattempts left.</span>':''}</div></div>`;
+  }else if(p.status!=='not'||p.evidence||(p.files||[]).length){
+    block+=`<div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>${p.reflection?`<div class="kv"><h4>${esc(WD.Trainee)}'s reflection</h4><p>${esc(p.reflection)}</p></div>`:''}`;
+  }
+  if(staff&&(p.status==='partial'||p.status==='rework')&&left<=0&&isAdmin())block+=`<div class="row"><button class="btn ghost small" data-act="grant" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}">Allow another reattempt</button></div>`;
+  if(staff)block+=planBox(tr,t,p)+assessForm(tr,t,p);
+  const aiTip=D.config.aiOptions[ak][1];
+  return`<details class="task" data-key="${esc(key)}" style="${pcv(t.cycle)}" ${openSet.has(key)?'open':''}>
+    <summary><span class="tid">${esc(t.id)}</span><span class="tname">${esc(t.name)}</span>
+      <span class="pills">${t.gate?`<span class="pill gate">${ico('shield',13)}Critical gate</span>`:''}${ds?`<span class="pill due-${ds}">${ico('calendar',13)}${dueText(p)}</span>`:''}<span class="pill s-${p.status}">${STATUS_ICON[p.status]?ico(STATUS_ICON[p.status],13):''}${STATUS[p.status]}</span></span>
+      <span class="ttopic">${ico(TYPE_ICON[t.type]||'target',15)}${esc(topicOf(t.topic).name)}${t.type?', '+esc(t.type.toLowerCase()):''}</span></summary>
+    <div class="tbody">
+      <div class="kv"><h4>What you'll do</h4><p>${esc(t.what)}</p></div>
+      <div class="kv"><h4>Agreed with your mentor or TL</h4><p>${p.due?`<span class="chip ${ds==='overdue'?'bad':ds==='soon'?'warn':''}">${ico('calendar',13)} ${dueText(p)}</span> `:'<span class="hint">No due date set yet. </span>'}<span class="chip ai-${ak}" title="${esc(aiTip)}">AI: ${esc(D.config.aiOptions[ak][0])}</span> ${t.real?'<span class="chip warn">Real student: consent checklist first</span>':''}</p><p class="hint">${esc(aiTip)} ${esc(D.config.aiRule)}</p></div>
+      ${docBox(t.doc)}
+      <div class="kv"><h4>How you'll be assessed</h4>${rubricView(t)}${t.gate?`<p class="hint">Critical gate: needs Complete with a score of ${D.config.passScore} or more.</p>`:''}</div>
+      <div class="kv"><h4>Evidence to submit</h4><p>${esc(t.evidence)}</p></div>
+      <div class="kv"><h4>Resources</h4><ul class="res">${res.map(r=>`<li>${isUrl(r.url)?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.label)}</a>`:`<span>${esc(r.label)}</span><span class="nolink">link not added yet</span>`}${r.note?`<span class="hint">${esc(r.note)}</span>`:''}</li>`).join('')||'<li class="nolink">No resources yet</li>'}</ul></div>
+      ${staff?`<p class="hint">Counts ${t.w}% toward training completion.</p>`:''}
+      ${checklistBox(tr,t,mine,editable)}
+      ${block}
+    </div></details>`;
+}
+</script>

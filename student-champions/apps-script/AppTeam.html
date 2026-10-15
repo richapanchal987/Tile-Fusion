@@ -1,0 +1,52 @@
+<script>
+'use strict';
+/* The Team dashboard and the admin forms for people. */
+function vTeam(){
+  const list=D.trainees.filter(t=>UI.archived||t.active);
+  const admin=isAdmin(),act=D.trainees.filter(t=>t.active);
+  const bar=v=>v==null?'<span class="hint">Not assessed</span>':`<div class="mini"><div class="t"><i style="width:${v}%"></i></div><b>${v}%</b></div>`;
+  const certified=act.filter(t=>t.stats.effective==='certified').length,behind=act.filter(t=>paceState(t)==='behind').length,crit=act.reduce((a,t)=>a+t.stats.openCritical.length,0);
+  return`${pageBanner('Team','Everyone in training, from one master plan.')}
+  ${tilesHtml([['users',act.length,'In the programme',''],['inbox',pendingTotal(),'Reviews waiting',pendingTotal()?'amber':''],['star',certified,D.config.levels.certified.label,'green'],['alert',behind,'Behind the calendar',behind?'red':''],['shield',crit,'Critical errors open',crit?'red':'green']])}
+  ${list.length?`<div class="tablewrap"><table class="team"><thead><tr><th>${WD.Trainee}</th><th>People</th><th>Joined</th><th>Ends</th><th>${WD.Cycle}</th><th>Completion</th><th>Pass marks</th><th>Gates</th><th>Status</th><th>Waiting</th>${admin?'<th></th>':''}</tr></thead><tbody>
+  ${list.map(tr=>{const s=tr.stats;return`<tr style="${tr.active?'':'opacity:.6'}"><td><button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">${esc(tr.name)}</button>${tr.active?'':' <span class="hint">archived</span>'}</td><td class="ppl">${peopleLine(tr,"<br>")}</td><td>${fmtDate(tr.start)}</td><td>${fmtDate(tr.end)}</td><td class="num">${s.current} of ${D.config.cycles}${paceState(tr)==='behind'?` <span class="chip warn">${pts(paceGap(tr))} behind</span>`:''}</td><td>${bar(s.completion)}</td><td class="num">${s.modulesMet} of ${s.modules.length}${s.openCritical.length?` <span class="chip bad">critical error</span>`:''}</td><td class="num">${s.gatesPassed} of ${s.gatesTotal}</td><td><span class="rbadge ${s.effective}" title="${esc(LEVEL[s.effective])}">${esc(D.config.levels[s.effective].short)}</span></td><td class="num">${s.pending||''}</td>${admin?`<td><button class="btn ghost small" data-act="edit-trainee" data-id="${esc(tr.id)}">Edit</button></td>`:''}</tr>`}).join('')}
+  </tbody></table></div>`:`<div class="empty">${emptyArt('seed')}<h3>No ${WD.trainees} yet</h3><p>${admin?'Use the form below to enrol the first one.':'An admin enrols '+WD.trainees+' from this tab.'}</p></div>`}
+  <div class="row" style="margin-bottom:18px"><label class="row"><input type="checkbox" data-act="archived" ${UI.archived?'checked':''}> Show archived</label><button class="btn ghost small" data-act="export-team">Download team summary (CSV)</button></div>
+  ${admin?teamAdmin(D.staff||[]):''}`;
+}
+
+const staffChecks=(name,staff,sel)=>staff.length?`<div class="checks" role="group" aria-label="${WD.mentor}s">${staff.map(s=>`<label><input type="checkbox" name="${name}" value="${esc(s.email)}" ${sel.includes(s.email)?'checked':''}> ${esc(s.name)}</label>`).join('')}</div>`:'<p class="hint">Add staff below first.</p>';
+const staffSelect=(id,label,staff,cur,empty)=>`<div class="field"><label for="${id}">${label}</label><select class="big" id="${id}"><option value="">${empty}</option>${staff.map(s=>`<option value="${esc(s.email)}" ${s.email===cur?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>`;
+const peopleFields=(p,staff,cur)=>`<div class="field"><span class="lbl">${esc(WD.mentor)}(s)</span>${staffChecks(p+'-as',staff,cur.assessors||[])}</div>
+  <div class="formgrid">${staffSelect(p+'-tl','Team Leader (TL)',staff,cur.tl||'','No TL yet')}${staffSelect(p+'-cm',esc(WD.certifier),staff.filter(s=>s.certifies),cur.certifier||'','No '+esc(WD.certifier)+' yet')}</div>`;
+const readPeople=p=>({mentors:checked(p+'-as'),tl:val(p+'-tl'),certifier:val(p+'-cm')});
+
+function teamAdmin(staff){
+  const et=UI.editTrainee?T(UI.editTrainee):null,today=D.config.today;
+  return`
+  ${et?`<div class="panel" id="et"><h3>Edit ${esc(et.name)}</h3>
+    <div class="formgrid"><div class="field"><label for="et-name">Name</label><input type="text" id="et-name" value="${esc(et.name)}"></div>
+    <div class="field"><label for="et-start">Joining date</label><input type="date" id="et-start" value="${esc(et.start)}"></div></div>
+    ${peopleFields('et',staff,et)}
+    <label class="row"><input type="checkbox" id="et-active" ${et.active?'checked':''}> Currently in training (untick to archive)</label>
+    <div class="row"><button class="btn" data-act="trainee-save">Save</button><button class="btn ghost" data-act="trainee-cancel">Cancel</button></div></div>`:''}
+  <div class="panel"><h3>Enrol a ${esc(WD.trainee)}</h3>
+    <div class="formgrid"><div class="field"><label for="nt-name">Full name</label><input type="text" id="nt-name"></div>
+    <div class="field"><label for="nt-email">School email</label><input type="text" id="nt-email" placeholder="name@${esc(D.config.domain)}"></div>
+    <div class="field"><label for="nt-start">Joining date</label><input type="date" id="nt-start" value="${esc(today)}"></div></div>
+    ${peopleFields('nt',staff,{})}
+    <p class="hint">Training runs for ${D.config.programmeMonths} months from the joining date, in ${D.config.cycles} ${WD.cycle}s of ${D.config.daysPerCycle} working days (Sundays are not counted).</p>
+    <div class="row"><button class="btn" data-act="enrol">Enrol ${esc(WD.trainee)}</button></div></div>
+  <div class="panel"><h3>Staff</h3>
+    <div class="tablewrap" style="margin:0"><table style="min-width:640px"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>${esc(WD.certifier)}</th><th></th></tr></thead><tbody>
+    ${staff.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.email)}</td><td><select aria-label="Role for ${esc(s.name)}" data-staffrole="${esc(s.email)}" data-name="${esc(s.name)}"><option value="Admin" ${s.role==='Admin'?'selected':''}>${esc(WD.admin)}</option><option value="Assessor" ${s.role==='Assessor'?'selected':''}>${esc(WD.assessor)}</option></select></td><td><label class="row"><input type="checkbox" aria-label="${esc(WD.certifier)}: ${esc(s.name)}" data-staffcert="${esc(s.email)}" data-name="${esc(s.name)}" data-role="${esc(s.role)}" ${s.certifies?'checked':''}> Can certify</label></td><td>${s.email===D.me.email?'':`<button class="btn ghost small" data-act="staff-remove" data-email="${esc(s.email)}">Remove</button>`}</td></tr>`).join('')}</tbody></table></div>
+    <p class="hint">Everyone on this list can review work as a mentor or TL. ${esc(WD.admin)}s also edit the module and enrol ${WD.trainees}. Tick &ldquo;Can certify&rdquo; for the people who sign off completion; a person can hold any combination.</p>
+    <div class="formgrid"><div class="field"><label for="sf-name">Name</label><input type="text" id="sf-name"></div><div class="field"><label for="sf-email">School email</label><input type="text" id="sf-email" placeholder="name@${esc(D.config.domain)}"></div>
+    <div class="field"><label for="sf-role">Role</label><select class="big" id="sf-role"><option value="Assessor">${esc(WD.assessor)}</option><option value="Admin">${esc(WD.admin)}</option></select></div>
+    <label class="row"><input type="checkbox" id="sf-cert"> Can certify</label>
+    <div class="row"><button class="btn" data-act="staff-add">Add</button></div></div></div>
+  <div class="panel"><h3>Activity log</h3><p class="hint">Who submitted, assessed, planned, certified or changed what, most recent first.</p>
+    <div class="row"><button class="btn ghost small" data-act="log">${UI.log?'Refresh':'Show recent activity'}</button></div>
+    ${UI.log?(UI.log.length?`<div class="tablewrap" style="margin:0"><table style="min-width:680px"><thead><tr><th>When</th><th>By</th><th>Action</th><th>${WD.Trainee}</th><th>Task</th><th>Detail</th></tr></thead><tbody>${UI.log.map(l=>`<tr><td class="num">${esc(l.time)}</td><td>${esc(l.by)}</td><td>${esc(l.action)}</td><td>${esc(l.trainee)}</td><td>${esc(l.task)}</td><td>${esc(l.detail)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="hint">Nothing recorded yet.</p>'):''}</div>`;
+}
+</script>

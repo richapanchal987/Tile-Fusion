@@ -1,0 +1,99 @@
+<script>
+'use strict';
+/* Curriculum (admin) and the Guide. */
+function resEditor(topic,task){
+  const k=topic+'|'+task;
+  if(!RES[k])RES[k]=D.res.filter(r=>r.topic===topic&&r.task===task).map(r=>Object.assign({},r));
+  return`<div class="kv"><h4>${task?'Resources for this task':'Resources for the whole module'}</h4>
+    ${RES[k].map((r,i)=>`<div class="resrow"><input type="text" aria-label="Resource name" placeholder="Name" value="${esc(r.label)}" data-rs="${k}" data-i="${i}" data-rf="label"><input type="text" aria-label="Resource link" placeholder="Link (https://...)" value="${esc(r.url)}" data-rs="${k}" data-i="${i}" data-rf="url"><input type="text" aria-label="Note" placeholder="Note (optional)" value="${esc(r.note)}" data-rs="${k}" data-i="${i}" data-rf="note"><button class="btn ghost small" data-act="res-del" data-scope="${k}" data-i="${i}">Remove</button></div>`).join('')}
+    <div class="row"><button class="btn ghost small" data-act="res-add" data-scope="${k}">Add resource</button><button class="btn small" data-act="res-save" data-scope="${k}" data-topic="${topic}" data-task="${esc(task)}">Save resources</button></div></div>`;
+}
+
+function taskForm(){
+  const f=UI.tf,isNew=UI.editTask.startsWith('new:'),N=D.config.cycles;
+  return`<div class="taskform" id="tf">
+    <div class="formgrid"><div class="field"><label for="tf-id">Task ID</label><input type="text" id="tf-id" data-tf="id" value="${esc(f.id)}" ${isNew?'':'readonly'}></div>
+    <div class="field"><label for="tf-name">Task name</label><input type="text" id="tf-name" data-tf="name" value="${esc(f.name)}"></div>
+    <div class="field"><label for="tf-topic">Module</label><select class="big" id="tf-topic" data-tf="topic">${D.topics.map(t=>`<option value="${t.id}" ${t.id===f.topic?'selected':''}>${t.id}. ${esc(t.name)}</option>`).join('')}</select></div>
+    <div class="field"><label for="tf-cycle">${WD.Cycle}</label><select class="big" id="tf-cycle" data-tf="cycle">${Array.from({length:N},(_,i)=>`<option value="${i+1}" ${i+1===f.cycle?'selected':''}>${WD.Cycle} ${i+1}</option>`).join('')}</select></div>
+    <div class="field"><label for="tf-type">Type</label><select class="big" id="tf-type" data-tf="type">${D.config.taskTypes.map(x=>`<option ${x===f.type?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="field"><label for="tf-weight">Weight within module</label><input type="number" min="0" step="0.5" id="tf-weight" data-tf="weight" value="${esc(f.weight)}"></div>
+    <div class="field"><label for="tf-ai">AI tools (default)</label><select class="big" id="tf-ai" data-tf="ai">${Object.keys(D.config.aiOptions).map(a=>`<option value="${a}" ${f.ai===a?'selected':''}>${esc(D.config.aiOptions[a][0])}</option>`).join('')}</select></div>
+    <div class="field"><label for="tf-doc">Module text (doc section title)</label><input type="text" id="tf-doc" data-tf="doc" value="${esc(f.doc)}" placeholder="The Title heading in the Google Doc"></div></div>
+    <div class="checks"><label><input type="checkbox" data-tf="gate" ${f.gate?'checked':''}> Critical gate (must be passed before certification)</label><label><input type="checkbox" data-tf="real" ${f.real?'checked':''}> Involves a real student (consent checklist first)</label>${f.real?`<label>Students needed <input type="number" min="1" max="10" data-tf="students" value="${esc(f.students||1)}" style="width:64px"></label>`:''}</div>
+    <div class="field"><label for="tf-what">What the ${esc(WD.trainee)} will do</label><textarea id="tf-what" data-tf="what">${esc(f.what)}</textarea></div>
+    <div class="field"><label for="tf-standard">Competency standard (summary; the rubric below is what is scored)</label><textarea id="tf-standard" data-tf="standard">${esc(f.standard)}</textarea></div>
+    <div class="field"><label for="tf-evidence">Evidence / output</label><input type="text" id="tf-evidence" data-tf="evidence" value="${esc(f.evidence)}"></div>
+    <div class="row"><button class="btn" data-act="task-save">Save task</button><button class="btn ghost" data-act="task-cancel">Cancel</button></div>
+    ${isNew?'<p class="hint">Save the task first, then you can add resources and a rubric to it.</p>':resEditor(f.topic,f.id)}</div>`;
+}
+
+function rubricEditor(t){
+  const rows=UI.rub;
+  return`<div class="taskform" id="rubed"><h4>Rubric for ${esc(t.id)} ${esc(t.name)}</h4>
+    <p class="hint">Each criterion is scored 1 to 4 and the task score is the average. A blank level description shows the standard meaning of that score. &ldquo;Reference only&rdquo; rows are shown but never scored. A group heading (for example a case-study scenario) puts criteria under one heading.</p>
+    ${rows.map((r,i)=>`<div class="rubrow"><div class="formgrid"><div class="field"><label>Criterion</label><input type="text" value="${esc(r.criterion)}" data-rb="${i}" data-rf="criterion"></div>
+      <div class="field"><label>Group heading (optional)</label><input type="text" value="${esc(r.group.length>120?r.group.slice(0,117)+'…':r.group)}" data-rb="${i}" data-rf="group" ${r.group.length>120?'readonly title="This long heading is kept as it is"':''}></div>
+      <div class="field"><label>Used for</label><select class="big" data-rb="${i}" data-rf="use"><option value="score" ${r.use==='score'?'selected':''}>Scoring</option><option value="reference" ${r.use==='reference'?'selected':''}>Reference only</option></select></div></div>
+      <div class="field"><label>What is being evaluated</label><input type="text" value="${esc(r.evaluated)}" data-rb="${i}" data-rf="evaluated"></div>
+      <div class="formgrid">${[0,1,2,3].map(l=>`<div class="field"><label>${l+1} ${esc(SCALE[l+1])}</label><input type="text" value="${esc(r.levels[l])}" data-rb="${i}" data-rl="${l}" placeholder="Standard meaning"></div>`).join('')}</div>
+      <div class="row"><button class="btn ghost small" data-act="rub-del" data-i="${i}">Remove criterion</button></div></div>`).join('')}
+    <div class="row"><button class="btn ghost small" data-act="rub-add">Add criterion</button><button class="btn" data-act="rub-save">Save rubric</button><button class="btn ghost" data-act="rub-cancel">Cancel</button></div></div>`;
+}
+
+function syncPanel(){
+  const s=D.sync;
+  return`<section class="topic"><h3>Module text from the Google Doc</h3>
+    <p class="hint">The text of every task comes from &ldquo;${esc(D.config.docName)}&rdquo;. Each section starts with a Title heading in the doc. ${esc(WD.Trainees)} read it in the app and never need access to the doc. Press the button after editing the doc; it also refreshes by itself every night.</p>
+    ${s?`<p>Last refreshed ${esc(s.at)} by ${esc(s.by)}: ${s.sections} sections, ${Math.round(s.characters/1000)}k characters.</p>
+      ${s.missing.length?`<div class="note amber"><b>Not found in the doc (${s.missing.length}):</b> ${s.missing.map(esc).join('; ')}. Check the spelling of the doc section title on the task, or the Title heading in the doc.</div>`:'<p class="chip good">Every task found its section.</p>'}
+      ${s.unused.length?`<p class="hint">In the doc but not used by any task: ${s.unused.map(esc).join('; ')}.</p>`:''}`:'<p class="note amber">Not refreshed yet. Press the button to bring the module text in.</p>'}
+    <div class="row"><button class="btn" data-act="sync">Refresh from the doc</button></div></section>`;
+}
+
+function vCurriculum(){
+  if(!SET){SET=Object.assign({},{cycles:D.config.cycles,daysPerCycle:D.config.daysPerCycle,programmeMonths:D.config.programmeMonths,passScore:D.config.passScore,reattempts:D.config.reattempts,maxUploadMb:D.config.maxUploadMb});PH=D.config.phaseNames.map(n=>({name:n,old:n}))}
+  const total=Math.round(D.topics.reduce((a,t)=>a+t.w,0)*100)/100;
+  const setField=(k,l,min,max)=>`<div class="field"><label for="st-${k}">${l}</label><input type="number" id="st-${k}" min="${min}" max="${max}" data-set="${k}" value="${esc(SET[k])}"></div>`;
+  return`${pageBanner('Curriculum','Everything a '+WD.trainee+' sees comes from here. Changes apply straight away. Tasks are archived rather than deleted, so nobody loses past progress.')}
+  <section class="topic"><h3>Programme settings</h3>
+    <div class="formgrid">${setField('programmeMonths','Length in months',1,12)}${setField('cycles','Number of '+WD.cycle+'s',1,30)}${setField('daysPerCycle','Working days per '+WD.cycle,1,12)}${setField('passScore','Gate pass score (2 to 4)',2,4)}${setField('reattempts','Reattempts allowed',0,5)}${setField('maxUploadMb','Largest upload (MB)',1,25)}</div>
+    <div class="kv"><h4>Phases</h4><p class="hint" style="margin-bottom:8px">Each module belongs to a phase. Phases give the ${WD.cycle} path its colours and names and decide the milestone medals. A ${WD.cycle} that holds tasks from two phases takes the phase of its first task.</p>${PH.map((p,i)=>`<div class="resrow" style="grid-template-columns:3fr auto"><input type="text" aria-label="Phase name" value="${esc(p.name)}" data-ph="${i}" data-pf="name"><button class="btn ghost small" data-act="ph-del" data-i="${i}">Remove</button></div>`).join('')}<div class="row"><button class="btn ghost small" data-act="ph-add">Add phase</button></div></div>
+    <div class="row"><button class="btn" data-act="settings-save">Save settings</button></div></section>
+  ${syncPanel()}
+  <p class="${total===100?'muted':'chip warn'}" style="margin:0 0 12px">Module weights add up to ${total}%${total===100?'':'. They should total 100%.'}</p>
+  ${D.topics.map(tp=>{
+    const ts=D.tasks.filter(t=>t.topic===tp.id),editing=UI.editTopic===tp.id;
+    return`<section class="topic"><div class="th"><h3>${tp.id}. ${esc(tp.name)}</h3><span class="muted">${tp.w}% weight, pass mark ${tp.need}%, ${esc(phaseShortName(tp.phase))}</span></div>
+    ${tp.note?`<div class="note amber"><b>Open notes</b>\n${esc(tp.note)}</div>`:''}
+    ${editing?`<div class="taskform"><div class="formgrid"><div class="field"><label for="tp-name">Module name</label><input type="text" id="tp-name" data-tpf="name" value="${esc(UI.tpf.name)}"></div><div class="field"><label for="tp-w">Weight %</label><input type="number" id="tp-w" min="0" max="100" step="0.5" data-tpf="w" value="${esc(UI.tpf.w)}"></div><div class="field"><label for="tp-need">Pass mark %</label><input type="number" id="tp-need" min="0" max="100" data-tpf="need" value="${esc(UI.tpf.need)}"></div><div class="field"><label for="tp-phase">Phase</label><select class="big" id="tp-phase" data-tpf="phase">${D.config.phaseNames.map(n=>`<option ${n===UI.tpf.phase?'selected':''}>${esc(n)}</option>`).join('')}</select></div><div class="field"><label for="tp-doc">Module introduction (doc section title)</label><input type="text" id="tp-doc" data-tpf="doc" value="${esc(UI.tpf.doc)}"></div></div><div class="field"><label for="tp-note">Internal notes (staff only)</label><textarea id="tp-note" data-tpf="note">${esc(UI.tpf.note)}</textarea></div><div class="row"><button class="btn small" data-act="topic-save">Save module</button><button class="btn ghost small" data-act="topic-cancel">Cancel</button></div></div>`:`<div class="row"><button class="btn ghost small" data-act="topic-edit" data-id="${tp.id}">Edit module</button></div>`}
+    ${resEditor(tp.id,'')}
+    <ul class="tasklist">${ts.map(t=>`<li class="${t.active?'':'off'}"><span class="tid">${esc(t.id)}</span><span class="grow">${esc(t.name)}</span><span class="hint">${WD.Cycle} ${t.cycle}, ${esc((t.type||'').toLowerCase())}, weight ${t.weight}, AI: ${esc(D.config.aiOptions[t.ai||'ask'][0].toLowerCase())}</span>${t.gate?'<span class="pill gate">Critical gate</span>':''}${t.real?'<span class="pill">Real student</span>':''}${t.active?'':'<span class="pill">Archived</span>'}
+      <button class="btn ghost small" data-act="task-edit" data-id="${esc(t.id)}">Edit</button><button class="btn ghost small" data-act="rub-edit" data-id="${esc(t.id)}">Rubric (${D.rubrics.filter(r=>r.task===t.id&&r.use==='score').length})</button>${t.active?`<button class="btn ghost small" data-act="task-archive" data-id="${esc(t.id)}">Archive</button>`:`<button class="btn ghost small" data-act="task-restore" data-id="${esc(t.id)}">Restore</button>`}</li>${UI.editTask===t.id?`<li style="display:block">${taskForm()}</li>`:''}${UI.rubTask===t.id?`<li style="display:block">${rubricEditor(t)}</li>`:''}`).join('')}
+      ${UI.editTask==='new:'+tp.id?`<li style="display:block">${taskForm()}</li>`:''}</ul>
+    <div class="row"><button class="btn ghost small" data-act="task-new" data-topic="${tp.id}">Add a task</button></div></section>`}).join('')}
+  ${UI.editTopic==='new'?`<section class="topic"><h3>New module</h3><div class="taskform"><div class="formgrid"><div class="field"><label for="tp-name">Module name</label><input type="text" id="tp-name" data-tpf="name" value="${esc(UI.tpf.name)}"></div><div class="field"><label for="tp-w">Weight %</label><input type="number" id="tp-w" min="0" max="100" step="0.5" data-tpf="w" value="${esc(UI.tpf.w)}"></div><div class="field"><label for="tp-need">Pass mark %</label><input type="number" id="tp-need" min="0" max="100" data-tpf="need" value="${esc(UI.tpf.need)}"></div><div class="field"><label for="tp-phase">Phase</label><select class="big" id="tp-phase" data-tpf="phase">${D.config.phaseNames.map(n=>`<option ${n===UI.tpf.phase?'selected':''}>${esc(n)}</option>`).join('')}</select></div></div><div class="row"><button class="btn small" data-act="topic-save">Save module</button><button class="btn ghost small" data-act="topic-cancel">Cancel</button></div></div></section>`:`<div class="row"><button class="btn ghost" data-act="topic-new">Add a module</button></div>`}`;
+}
+
+/* ---------- guide ---------- */
+function vGuide(){
+  const c=D.config,ds=c.docSections,total=Math.round(D.topics.reduce((a,t)=>a+t.w,0)*100)/100;
+  return`${pageBanner('Guide','How this programme works')}<div class="guide" style="margin-top:22px">
+  <p class="muted">Finishing the tasks is not the aim. The aim is to show, to the people who watch you work, that you are ready to work safely and well with students as a Student Champion.</p>
+  <section><h2>The shape of it</h2><p>${c.programmeMonths} months from the day you join, in ${c.cycles} ${WD.cycle}s of ${c.daysPerCycle} working days (Sundays are not counted). Your mentor and TL agree a date with you for each task; ask early if you expect a delay. You can move faster if the work is ready.</p></section>
+  <section><h2>The module text</h2><p>Everything you read for a task is on the task itself under &ldquo;Module text&rdquo;. The introduction explains how the module works, how AI tools may be used, documentation, working with your mentor, integrity and confidentiality.</p>${docBox(ds.intro,'Introduction')}${docBox(ds.agreement,'Essential Agreement and core values')}</section>
+  <section><h2>What each module is worth</h2><p>Your training completion is built from these weights. A module's share is divided among its tasks, and each task earns its share when an assessor marks it Complete (Developing earns half).</p>
+    <ul class="tw">${D.topics.slice().sort((x,y)=>x.id-y.id).map(t=>{const ts=D.tasks.filter(x=>x.topic===t.id&&x.active),g=ts.filter(x=>x.gate).length,mx=Math.max(...D.topics.map(x=>x.w),1);return`<li><div class="twh"><span class="twn">${t.id}. ${esc(t.name)}</span><b class="twp">${t.w}%</b></div><div class="track"><i style="width:${t.w/mx*100}%"></i></div><small>${ts.length} task${ts.length===1?'':'s'}${g?`, ${g} critical gate${g===1?'':'s'}`:''}, pass mark ${t.need}%</small></li>`}).join('')}</ul>
+    <p class="hint">The modules add up to ${total}%. Critical gates are pass or fail on top of the percentage.</p></section>
+  <section><h2>Scores and pass marks</h2><dl>${[4,3,2,1].map(s=>`<dt>${s} ${esc(SCALE[s])}</dt><dd>${esc(c.scaleHelp[s])}</dd>`).join('')}</dl>
+    <p>Every task is scored on its own rubric: each criterion from 1 to 4, and the task score is the average, rounded up at .5. A score of 3 or 4 is Complete. A 2 means Developing: you reattempt once after feedback (${c.reattempts} reattempt${c.reattempts===1?'':'s'} allowed; an admin can allow one more). A 1 is not yet met.</p>
+    <p>A module's percentage is the score out of 4 on each of its tasks, weighted, with work not yet assessed counting as zero. ${(()=>{const lo=Math.min(...D.topics.map(t=>t.need)),hi=D.topics.filter(t=>t.need>lo);return`You need at least ${lo}% in every module${hi.length?` and ${hi[0].need}% in module${hi.length===1?'':'s'} ${hi.map(t=>t.id).join(', ')}`:''}.`})()}</p></section>
+  <section><h2>Critical gates and critical errors</h2><dl><dt>Critical gates</dt><dd>Tasks that must be Complete with a score of ${c.passScore} or more before you can be certified. A high percentage cannot make up for a gate that is not passed.</dd><dt>Critical errors</dt><dd>An action that could put a student at risk or seriously breach trust. Any one makes the task &ldquo;not yet met&rdquo; whatever the score. You have a remediation conversation with your TL and then reattempt. A critical error in a real student interaction is reported to your TL the same day.</dd></dl>
+    <ul class="lvl generic">${c.criticalErrors.map(e=>`<li><b>${esc(e[0])}</b> For example: ${esc(e[1])}</li>`).join('')}</ul></section>
+  <section><h2>Using AI tools</h2><p>${esc(c.aiRule)}</p><dl>${Object.keys(c.aiOptions).map(k=>`<dt>${esc(c.aiOptions[k][0])}</dt><dd>${esc(c.aiOptions[k][1])}</dd>`).join('')}</dl><p>Each task shows its setting. Your mentor or TL can change it for you; if AI is allowed, be ready to explain how you used it.</p></section>
+  <section><h2>Working with real students</h2><p>${esc(c.checklist.intro)}</p><p>You complete a short checklist in the app for each real student, before the task begins, and it is needed before you can submit tasks that involve a real student (${D.tasks.filter(t=>t.real&&t.active).map(t=>esc(t.id)).join(', ')}). The checklist never asks for a name.</p></section>
+  <section><h2>Becoming ${esc(c.levels.certified.label.toLowerCase())}</h2><p>The app works out whether you are eligible: every critical gate passed, every module at its pass mark, the consent checklists done and no critical error waiting for a reattempt. Eligibility is not the same as certification: your ${esc(WD.certifier)} confirms it, after the final readiness review.</p></section>
+  <section><h2>Who does what</h2><dl><dt>${esc(WD.Trainee)}</dt><dd>Does the tasks, agrees dates, adds evidence and keeps students anonymous.</dd><dt>${esc(WD.mentor)} and ${esc(WD.tl)}</dt><dd>Agree timelines, observe, give feedback and score the rubrics.</dd><dt>${esc(WD.certifier)}</dt><dd>Holds the final readiness review and confirms certification.</dd></dl></section>
+  <section><h2>Evidence</h2><p>Tasks that are watched live (role plays, the viva, observed sessions and meetings) are assessed on the spot, so you may have nothing to upload. Where you do add evidence, keep students anonymous: use the student code, never names or case detail. Recording sessions is never required by default.</p></section></div>`;
+}
+</script>

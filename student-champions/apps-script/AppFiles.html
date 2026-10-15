@@ -1,0 +1,87 @@
+<script>
+'use strict';
+/* CSV downloads and the in-app viewers for evidence files. */
+function csvCell(v){v=String(v==null?'':v);return/[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function download(name,rows){
+  const text='﻿'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'}));a.download=name;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
+function exportTracker(tr){
+  const rows=[[WD.Cycle,'Phase','Module','Task ID','Task','Type','Critical gate','Status','Score /4','Critical error','Due date','AI tools','Assessed by','Date assessed','Feedback','Evidence link','Files']];
+  D.tasks.filter(t=>t.active).forEach(t=>{const p=P(tr,t.id);rows.push(['C'+t.cycle,t.phase,topicOf(t.topic).name,t.id,t.name,t.type,t.gate?'Yes':'No',STATUS[p.status],p.score||'',p.critical||'',p.due||'',D.config.aiOptions[aiKey(t,p)][0],p.assessor||'',p.date||'',p.feedback||'',p.evidence||'',(p.files||[]).map(f=>f.name).join('; ')])});
+  download('tracker-'+tr.name.replace(/\W+/g,'-')+'.csv',rows);
+}
+function exportTeam(){
+  const rows=[[WD.Trainee,'Email','Joined','Ends',WD.mentor+'(s)','TL',WD.certifier,'Current '+WD.cycle,'Points behind calendar','Completion %','Competency %','Module pass marks met','Modules','Gates passed','Gates total','Status','Open critical errors','Reviews waiting','Active']];
+  D.trainees.forEach(tr=>{const s=tr.stats;rows.push([tr.name,tr.id,tr.start,tr.end,tr.assessorNames.join('; '),tr.tlName,tr.certifierName,s.current,Math.max(0,-paceGap(tr)),s.completion,s.competency==null?'':s.competency,s.modulesMet,s.modules.length,s.gatesPassed,s.gatesTotal,LEVEL[s.effective],s.openCritical.join('; '),s.pending,tr.active?'Yes':'No'])});
+  download('team-summary.csv',rows);
+}
+
+const readB64=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(new Error('Could not read that file.'));r.readAsDataURL(f)});
+const MIME={pdf:'application/pdf',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',txt:'text/plain',mp3:'audio/mpeg',m4a:'audio/mp4',mp4:'video/mp4',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'};
+const CDN={pdf:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/',mammoth:'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js'};
+const extOf=n=>(String(n).split('.').pop()||'').toLowerCase();
+async function getFile(trId,taskId,fid){
+  if(FILES[fid])return FILES[fid];
+  const f=await call('getEvidenceFile',trId,taskId,fid);
+  const bin=atob(f.data),u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+  return FILES[fid]={name:f.name,bytes:u8,url:null};
+}
+const blobUrl=f=>f.url||(f.url=URL.createObjectURL(new Blob([f.bytes],{type:MIME[extOf(f.name)]||'application/octet-stream'})));
+async function openFile(trId,taskId,fid){
+  try{toast('Preparing file…');const f=await getFile(trId,taskId,fid);
+    const a=document.createElement('a');a.href=blobUrl(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove();toast('Downloaded '+f.name);
+  }catch(e){toast((e&&e.message)||String(e),true)}
+}
+const scriptP={};
+function loadScript(src){return scriptP[src]||(scriptP[src]=new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>{delete scriptP[src];rej(new Error('Could not load the viewer. Check your connection.'))};document.head.appendChild(s)}))}
+async function pdfLib(){
+  await loadScript(CDN.pdf+'pdf.min.js');
+  if(!window.pdfjsLib.GlobalWorkerOptions.workerSrc||!/^blob:/.test(window.pdfjsLib.GlobalWorkerOptions.workerSrc)){
+    const code=await (await fetch(CDN.pdf+'pdf.worker.min.js')).text();  // a blob worker avoids cross-origin worker limits
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
+  }
+  return window.pdfjsLib;
+}
+async function showPdf(el,f){
+  const lib=await pdfLib(),pdf=await lib.getDocument({data:f.bytes.slice()}).promise,max=Math.min(pdf.numPages,30);
+  const wrap=document.createElement('div');wrap.className='pdfpages';el.innerHTML='';el.appendChild(wrap);
+  const width=Math.max(320,Math.min(el.clientWidth||720,900)),dpr=window.devicePixelRatio||1;
+  for(let i=1;i<=max;i++){
+    const page=await pdf.getPage(i),w0=page.getViewport({scale:1}).width,vp=page.getViewport({scale:width/w0*dpr});
+    const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;c.setAttribute('role','img');c.setAttribute('aria-label','Page '+i+' of '+pdf.numPages);
+    wrap.appendChild(c);await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+  }
+  if(pdf.numPages>max){const p=document.createElement('p');p.className='hint';p.textContent='Showing the first '+max+' of '+pdf.numPages+' pages. Download the file to read the rest.';el.appendChild(p)}
+}
+async function showDocx(el,f){
+  await loadScript(CDN.mammoth);
+  const r=await window.mammoth.convertToHtml({arrayBuffer:f.bytes.buffer.slice(f.bytes.byteOffset,f.bytes.byteOffset+f.bytes.byteLength)});
+  const fr=document.createElement('iframe');fr.className='vdoc';fr.title=f.name;fr.setAttribute('sandbox','');  // no scripts can run inside the document
+  fr.srcdoc='<!doctype html><meta charset="utf-8"><style>body{font:15px/1.55 system-ui,sans-serif;margin:14px;color:#1c2b36;background:#fff}img{max-width:100%}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style>'+r.value;
+  el.innerHTML='';el.appendChild(fr);
+}
+async function renderViewer(el,f){
+  const ext=extOf(f.name);el.innerHTML='<p class="hint">Loading…</p>';
+  try{
+    if(ext==='pdf')await showPdf(el,f);
+    else if(ext==='png'||ext==='jpg'||ext==='jpeg')el.innerHTML=`<img class="vimg" alt="${esc(f.name)}" src="${blobUrl(f)}">`;
+    else if(ext==='txt')el.innerHTML=`<pre class="vtext">${esc(new TextDecoder('utf-8').decode(f.bytes.slice(0,200000)))}</pre>`;
+    else if(ext==='mp3'||ext==='m4a')el.innerHTML=`<audio controls src="${blobUrl(f)}" style="width:100%"></audio>`;
+    else if(ext==='mp4')el.innerHTML=`<video controls src="${blobUrl(f)}" style="max-width:100%"></video>`;
+    else if(ext==='docx')await showDocx(el,f);
+    else el.innerHTML='<p class="note">This kind of file cannot be shown in the app. Use Download to open it, or ask the '+esc(WD.trainee)+' to upload a PDF.</p>';
+  }catch(e){el.innerHTML=`<p class="note red">${esc((e&&e.message)||e)} You can still use Download.</p>`}
+}
+const viewerEl=fid=>document.querySelector(`[data-viewer="${CSS.escape(fid)}"]`);
+async function toggleViewer(trId,taskId,fid){
+  const box=viewerEl(fid),btn=document.querySelector(`[data-act=viewfile][data-fid="${CSS.escape(fid)}"]`);
+  if(!box)return;
+  if(VIEWING.has(fid)){VIEWING.delete(fid);box.hidden=true;box.innerHTML='';if(btn){btn.textContent='View';btn.setAttribute('aria-expanded','false')}return}
+  VIEWING.add(fid);box.hidden=false;box.innerHTML='<p class="hint">Loading…</p>';if(btn){btn.textContent='Hide';btn.setAttribute('aria-expanded','true')}
+  try{const f=await getFile(trId,taskId,fid);if(VIEWING.has(fid)){const b=viewerEl(fid);if(b)await renderViewer(b,f)}}
+  catch(e){VIEWING.delete(fid);const b=viewerEl(fid);if(b){b.hidden=true;b.innerHTML=''}if(btn){btn.textContent='View';btn.setAttribute('aria-expanded','false')}toast((e&&e.message)||String(e),true)}
+}
+function mountViewers(){VIEWING.forEach(fid=>{const el=viewerEl(fid);if(el&&FILES[fid]&&!el.firstChild)renderViewer(el,FILES[fid])})}
+</script>

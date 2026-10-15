@@ -1,0 +1,77 @@
+<script>
+'use strict';
+/* Assessing against the rubric, and the Reviews queue. */
+
+/** What an assessor's marks add up to. Mirrors validateAssessment_ in Logic.gs, which is what actually decides. */
+function assessSummary(rows,vals,gate,critical,exempt){
+  if(exempt)return{text:'Exempt: full credit for this task. Say why in the feedback.',score:null};
+  if(critical)return{text:'Critical error: not yet met, whatever the criteria say. Describe what happened in the feedback.',score:1};
+  const given=rows.length?rows.filter(r=>vals[r.order]).length:(vals.single?1:0),total=rows.length||1;
+  if(given<total)return{text:`Scored ${given} of ${total} criteri${total===1?'on':'a'}.`,score:null};
+  const sc=rows.length?Math.floor(rows.reduce((a,r)=>a+(+vals[r.order]),0)/rows.length+.5):+vals.single;
+  const meets=sc>=3&&sc>=D.config.passScore;
+  return{text:`Score ${sc}, ${SCALE[sc]}. Result: ${meets?'Complete':sc>=2?'Developing, the '+WD.trainee+' reattempts after feedback':'Not yet met, the '+WD.trainee+' reattempts'}.`,score:sc};
+}
+function readAssess(form){
+  const vals={},rows=[];
+  form.querySelectorAll('input[data-f=crit]:checked').forEach(x=>{vals[x.dataset.o]=x.value});
+  const one=form.querySelector('input[data-f=score]:checked');if(one)vals.single=one.value;
+  return{vals:vals,exempt:!!(form.querySelector('[data-f=exempt]')||{}).checked,critical:(form.querySelector('[data-f=critical]')||{}).value||''};
+}
+function refreshSummary(form){
+  const t=D.tasks.find(x=>x.id===form.dataset.t),rows=D.rubrics.filter(r=>r.task===t.id&&r.use==='score'),s=readAssess(form);
+  const out=assessSummary(rows,s.vals,t.gate,s.critical,s.exempt),el=form.querySelector('[data-result]');
+  if(el)el.textContent=out.text;
+}
+
+function assessForm(tr,t,p){
+  const sl=slug(tr.id+'_'+t.id),assessed=['complete','partial','rework','exempt'].includes(p.status);
+  const rows=D.rubrics.filter(r=>r.task===t.id&&r.use==='score');
+  const ex=dv(tr.id,t.id,'exempt',assessed&&p.status==='exempt'?'1':'')==='1',cr=dv(tr.id,t.id,'critical',p.critical||''),fb=dv(tr.id,t.id,'feedback',assessed?p.feedback:'');
+  const vals={};
+  rows.forEach(r=>{vals[r.order]=dv(tr.id,t.id,'c'+r.order,p.criteria&&p.criteria[r.order]&&!ex?String(p.criteria[r.order]):'')});
+  const single=dv(tr.id,t.id,'score',assessed&&p.score&&!rows.length?String(p.score):'');if(single)vals.single=single;
+  const radios=(name,cur,dataf,order,lv)=>`<div class="scale s4">${[1,2,3,4].map(s=>`<input type="radio" name="${name}" id="${name}-${s}" value="${s}" data-f="${dataf}" ${order!=null?`data-o="${order}"`:''} ${cur===String(s)?'checked':''}><label for="${name}-${s}" title="${esc((lv&&lv[s-1])||D.config.scaleHelp[s])}"><b>${s}</b>${esc(SCALE[s])}</label>`).join('')}</div>`;
+  const crit=r=>`<div class="critrow"><div class="ct"><b>${esc(r.criterion)}</b>${r.evaluated?`<small>${esc(r.evaluated)}</small>`:''}${r.levels.some(Boolean)?`<details class="lvhelp"><summary>What each score means here</summary><ul class="lvl">${r.levels.map((x,i)=>`<li><b>${i+1}</b> ${esc(x||D.config.scaleHelp[i+1])}</li>`).join('')}</ul></details>`:''}</div>${radios('cr-'+sl+'-'+r.order,vals[r.order],'crit',r.order,r.levels)}</div>`;
+  const groups=[],by={};rows.forEach(r=>{if(!by[r.group]){by[r.group]={g:r.group,rows:[]};groups.push(by[r.group])}by[r.group].rows.push(r)});
+  const rubric=rows.length?groups.map((g,i)=>{
+    const k='ag|'+tr.id+'|'+t.id+'|'+i,n=g.rows.filter(r=>vals[r.order]).length;
+    return g.g?`<details class="rgroup" data-key="${esc(k)}" ${openSet.has(k)||groups.length===1?'open':''}><summary>${esc(g.g.length>90?g.g.slice(0,87)+'…':g.g)} <span class="hint">${n} of ${g.rows.length} scored</span></summary>${g.rows.map(crit).join('')}</details>`:g.rows.map(crit).join('');
+  }).join(''):`<fieldset><legend class="hint">Score (this task has no rubric; an admin can add one in Curriculum)</legend>${radios('sc-'+sl,single,'score',null,null)}</fieldset>`;
+  const sum=assessSummary(rows,vals,t.gate,cr,ex);
+  return`<div class="assessform" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}" data-gate="${t.gate}">
+    <h4>${assessed?'Update assessment':p.status==='submitted'?'Assess this submission':'Record an assessment'}</h4>
+    ${p.status==='not'||p.status==='progress'?'<p class="hint">Use this for tasks you observe directly, such as role plays, vivas and observed sessions. The '+esc(WD.trainee)+' does not have to submit anything first.</p>':''}
+    ${rubric}
+    <p class="result" data-result role="status">${esc(sum.text)}</p>
+    <div class="formgrid">
+      ${t.gate?'':`<label class="row"><input type="checkbox" data-f="exempt" ${ex?'checked':''}> Exempt (for example prior experience)</label>`}
+      <div class="field"><label for="ce-${sl}">Critical error</label><select class="big" id="ce-${sl}" data-f="critical"><option value="">None</option>${D.config.criticalErrors.map(c=>`<option value="${esc(c[0])}" ${cr===c[0]?'selected':''}>${esc(c[0])}</option>`).join('')}</select></div></div>
+    ${cr?`<p class="hint">For example: ${esc((D.config.criticalErrors.find(c=>c[0]===cr)||['',''])[1])}. The TL needs to know the same day if this was a real student interaction.</p>`:''}
+    <div class="field"><label for="fb-${sl}">Feedback and development goal</label><textarea id="fb-${sl}" data-f="feedback">${esc(fb)}</textarea></div>
+    <div class="row"><button class="btn" data-act="assess">Save assessment</button>${assessed&&p.assessor?`<span class="hint">Last by ${esc(p.assessor)}, ${fmtDate(p.date)}</span>`:''}</div>
+  </div>`;
+}
+
+/* ---------- reviews ---------- */
+function vReview(){
+  const items=[];
+  D.trainees.forEach(tr=>{if(tr.active)D.tasks.forEach(t=>{if(t.active&&P(tr,t.id).status==='submitted')items.push([tr,t,P(tr,t.id)])})});
+  items.sort((a,b)=>String(a[2].submitted).localeCompare(String(b[2].submitted)));
+  const by={};items.forEach(([tr])=>{(by[tr.id]=by[tr.id]||{tr:tr,n:0}).n++});
+  const who=Object.values(by),f=UI.rvFilter&&by[UI.rvFilter]?UI.rvFilter:null,shown=items.filter(i=>!f||i[0].id===f);
+  const act=D.trainees.filter(t=>t.active),behind=act.filter(t=>paceState(t)==='behind').length,crit=act.reduce((a,t)=>a+t.stats.openCritical.length,0);
+  return`${pageBanner('Reviews','Work waiting for your decision, oldest first.')}
+  ${tilesHtml([['inbox',items.length,'Waiting for review',items.length?'amber':''],['users',act.length,WD.Trainees+' in the programme',''],['alert',behind,'Behind the calendar',behind?'red':'green'],['shield',crit,'Critical errors to reattempt',crit?'red':'green']])}
+  <p class="lede">Score each criterion from 1 to 4 against the rubric; the task score is the average. A critical-gate task needs ${D.config.passScore} or more to be Complete. Any critical error makes the task not yet met.</p>
+  ${items.length?`<div class="rvchips" role="group" aria-label="Filter by ${WD.trainee}"><button class="chipbtn ${f?'':'on'}" data-act="rvfilter" data-id="">Everyone <b>${items.length}</b></button>${who.map(w=>`<button class="chipbtn ${f===w.tr.id?'on':''}" data-act="rvfilter" data-id="${esc(w.tr.id)}">${esc(w.tr.name)} <b>${w.n}</b></button>`).join('')}</div>`:''}
+  ${shown.length?shown.map(([tr,t,p])=>`<article class="rv" style="${pcv(t.cycle)}">
+    <div class="rvhead"><div class="rvwho"><span class="avatar" aria-hidden="true">${esc(initials(tr.name))}</span><div><p class="who">${esc(tr.name)}</p><p class="muted">${WD.Cycle} ${t.cycle}${p.submitted?', submitted '+fmtDate(p.submitted):''} <button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">Open full training</button></p></div></div><div class="pills">${t.gate?`<span class="pill gate">${ico('shield',13)}Critical gate</span>`:''}${p.failed?`<span class="pill s-partial">Attempt ${p.failed+1}</span>`:''}${p.due?`<span class="pill">${ico('calendar',13)}${dueText(p)}</span>`:''}</div></div>
+    <h3>${esc(t.id)} ${esc(t.name)}</h3>
+    <div class="kv"><h4>What was asked</h4><p>${esc(t.what)}</p></div>
+    <div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>
+    ${p.reflection?`<div class="kv"><h4>${esc(WD.Trainee)}'s reflection</h4><p>${esc(p.reflection)}</p></div>`:''}
+    ${p.feedback?`<div class="note amber"><b>Earlier feedback:</b> ${esc(p.feedback)}</div>`:''}
+    ${assessForm(tr,t,p)}</article>`).join(''):`<div class="empty">${emptyArt('reviews')}<h3>All caught up</h3><p>No reviews waiting. When a ${WD.trainee} submits a task it appears here.</p></div>`}`;
+}
+</script>

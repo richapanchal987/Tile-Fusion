@@ -1,0 +1,281 @@
+{
+ "_about": "The one place to change wording, names, colours and rules that differ between programmes. After editing, run: python3 tools/build.py (it rewrites Config.gs, Styles.html and the seed files).",
+ "app": {
+  "name": "Student Champion Training",
+  "org": "Fountainhead Student Champion Team",
+  "domain": "fsksurat.in",
+  "firstAdmin": "richa.panchal@fsksurat.in",
+  "firstAdminName": "Richa Panchal",
+  "evidenceFolder": "Student Champion Training Evidence (private)",
+  "storagePrefix": "sc",
+  "moduleDocId": "1I-3y8T5IMr5zLIY9vchbED-IcyTklsXtn-50SU8Bkrc",
+  "moduleDocName": "Student Champion Training Module 2026-27",
+  "maxFilesPerTask": 5
+ },
+ "words": {
+  "trainee": "trainee",
+  "Trainee": "Trainee",
+  "trainees": "trainees",
+  "Trainees": "Trainees",
+  "assessor": "Mentor / TL",
+  "assessors": "Mentors and TLs",
+  "mentor": "Mentor",
+  "tl": "Team Leader (TL)",
+  "certifier": "Certifying Mentor",
+  "admin": "Admin",
+  "programme": "programme",
+  "cycle": "cycle",
+  "Cycle": "Cycle"
+ },
+ "levels": {
+  "notcertified": {
+   "label": "Not yet certified",
+   "short": "In training"
+  },
+  "certified": {
+   "label": "Student Champion certified",
+   "short": "Certified"
+  }
+ },
+ "scale": {
+  "1": "Not yet met",
+  "2": "Developing",
+  "3": "Secure",
+  "4": "Strong"
+ },
+ "scaleHelp": {
+  "1": "Several criteria are not met, or a critical error. Reattempt after feedback.",
+  "2": "One or more criteria are not met. Reattempt after feedback.",
+  "3": "Meets the criteria. Minor gaps that do not affect student safety or role clarity.",
+  "4": "Meets every criterion and shows independent judgement and reflection beyond the prompt."
+ },
+ "statusLabels": {
+  "not": "Not started",
+  "progress": "In progress",
+  "submitted": "Awaiting review",
+  "complete": "Complete",
+  "partial": "Developing: reattempt",
+  "rework": "Not yet met",
+  "exempt": "Exempt"
+ },
+ "outcomes": {
+  "complete": [
+   "Complete",
+   "Meets the criteria (Secure or Strong)"
+  ],
+  "partial": [
+   "Developing",
+   "Some criteria are met; the trainee reattempts after feedback"
+  ],
+  "rework": [
+   "Not yet met",
+   "Not there yet, or a critical error; the trainee reattempts"
+  ],
+  "exempt": [
+   "Exempt",
+   "Not needed, for example prior experience"
+  ]
+ },
+ "rules": {
+  "cycles": 13,
+  "daysPerCycle": 6,
+  "programmeMonths": 3,
+  "passScore": 3,
+  "moduleThreshold": 60,
+  "strictModuleThreshold": 70,
+  "strictModules": [
+   1,
+   6,
+   7
+  ],
+  "reattempts": 1,
+  "maxUploadMb": 10
+ },
+ "phases": [
+  "Phase 1 - Foundation",
+  "Phase 2 - Skill Development",
+  "Phase 3 - Applied Practice",
+  "Phase 4 - Final Readiness"
+ ],
+ "aiOptions": {
+  "ask": [
+   "Ask first",
+   "Ask your mentor or TL before using any AI tool for this task."
+  ],
+  "no": [
+   "Not allowed",
+   "Do this task with your own thinking and effort. No AI tools."
+  ],
+  "yes": [
+   "Allowed",
+   "AI may be used. Follow the task guidelines and be ready to explain how you used it."
+  ]
+ },
+ "aiRule": "Never enter student names, initials with identifying details, records, grades, meeting notes, disclosures, or anything that could identify a student, parent or colleague into an AI tool, even when AI use is allowed.",
+ "criticalErrors": [
+  [
+   "Promising confidentiality where it cannot be kept",
+   "\"I won't tell anyone, I promise\" after a disclosure of harm"
+  ],
+  [
+   "Failing to escalate a safeguarding or risk indicator",
+   "Noting a self-harm remark but not informing the WBC/TL the same day"
+  ],
+  [
+   "Investigating an allegation",
+   "Questioning a teacher or family member about a disclosure instead of reporting it"
+  ],
+  [
+   "Diagnosing or labelling",
+   "Telling a parent \"I think she has anxiety\" or \"he is ADHD\""
+  ],
+  [
+   "Sharing student information inappropriately",
+   "Repeating one sibling's confidential disclosures to parents while supporting the other"
+  ],
+  [
+   "Breaching a school boundary non-negotiable",
+   "Private messaging a student on a personal phone or social media"
+  ],
+  [
+   "Entering identifiable student information into an AI tool",
+   "Pasting a student's meeting notes into a chatbot for a summary"
+  ]
+ ],
+ "checklist": {
+  "title": "Real student work: pre-task safeguarding and consent checklist",
+  "intro": "Complete this for every real student before the task begins. Use a student code such as G10-S1, never a name. It does not replace the school's safeguarding, consent, confidentiality or referral procedures. If you are unsure, pause and ask your TL or mentor.",
+  "codeExample": "G10-S1",
+  "groups": [
+   [
+    "Student selection and approval",
+    [
+     "The student has been approved by my TL or mentor.",
+     "The task is appropriate for this student and does not go beyond my current level of training or role."
+    ]
+   ],
+   [
+    "Student awareness and consent",
+    [
+     "The student knows the interaction is part of my Student Champion training.",
+     "The student knows the meeting may be observed by the mentor or TL for training and feedback.",
+     "The student understands the purpose and what will happen with the information shared.",
+     "The student has agreed voluntarily and knows they can decline, pause or stop at any point without any consequence."
+    ]
+   ],
+   [
+    "Parent or guardian",
+    [
+     "The parent or guardian has been informed, or consent obtained, where school policy requires it.",
+     "I have confirmed the required process with my TL or mentor."
+    ]
+   ],
+   [
+    "Information and records access",
+    [
+     "I have confirmed which records I may access for this task.",
+     "I will use only the information that is necessary and permitted.",
+     "No student information will be copied, downloaded, shared or stored outside approved school systems."
+    ]
+   ],
+   [
+    "Confidentiality and safeguarding",
+    [
+     "All my notes and submissions use the student code, not the student's name.",
+     "I understand the limits of confidentiality: information may need to be shared for a safeguarding, safety or child-welfare concern.",
+     "I know who to approach for support or escalation, including the WBC and my TL or mentor, and I will consult them at once if I am unsure how to handle something a student discloses."
+    ]
+   ]
+  ]
+ },
+ "theme": {
+  "light": {
+   "--bg": "#F3F6FB",
+   "--surface": "#FFFFFF",
+   "--sunk": "#E8EEF6",
+   "--ink": "#14233A",
+   "--muted": "#4F6178",
+   "--line": "#D5DEEA",
+   "--blue": "#0050A0",
+   "--blue-soft": "#DDE9F7",
+   "--red": "#B02020",
+   "--red-soft": "#F9E2E2",
+   "--yellow": "#F2C21A",
+   "--gold": "#7A5900",
+   "--gold-soft": "#FCF0C2",
+   "--good": "var(--blue)",
+   "--good-soft": "var(--blue-soft)",
+   "--p1": "#0050A0",
+   "--p1i": "#0050A0",
+   "--p1n": "#FFFFFF",
+   "--p2": "#B02020",
+   "--p2i": "#B02020",
+   "--p2n": "#FFFFFF",
+   "--p3": "#F2C21A",
+   "--p3i": "#7A5900",
+   "--p3n": "#2E2200",
+   "--p4": "#6F3D78",
+   "--p4i": "#6F3D78",
+   "--p4n": "#FFFFFF",
+   "--hero-a": "#0050A0",
+   "--hero-b": "#B02020",
+   "--leaf1": "#0A62BA",
+   "--leaf2": "#4C8FD6",
+   "--stem": "#003E7E",
+   "--soil": "#B9A58A",
+   "--pot": "#B02020",
+   "--bloom": "#B02020",
+   "--bloom2": "#F2C21A",
+   "--shadow": "0 1px 2px rgba(10,35,80,.07),0 8px 24px rgba(10,35,80,.08)",
+   "--shadow-up": "0 2px 4px rgba(10,35,80,.1),0 14px 30px rgba(10,35,80,.16)",
+   "--glow-a": "rgba(0,80,160,.12)",
+   "--glow-b": "rgba(176,32,32,.07)"
+  },
+  "dark": {
+   "--bg": "#0C1220",
+   "--surface": "#141D2E",
+   "--sunk": "#0A101C",
+   "--ink": "#E9EFF9",
+   "--muted": "#9DB0C8",
+   "--line": "#25344B",
+   "--blue": "#78B0FF",
+   "--blue-soft": "#12294B",
+   "--red": "#FF8D95",
+   "--red-soft": "#3A161D",
+   "--yellow": "#F5C928",
+   "--gold": "#F5C928",
+   "--gold-soft": "#352A0B",
+   "--good": "var(--blue)",
+   "--good-soft": "var(--blue-soft)",
+   "--p1": "#78B0FF",
+   "--p1i": "#78B0FF",
+   "--p1n": "#08213F",
+   "--p2": "#FF8D95",
+   "--p2i": "#FF8D95",
+   "--p2n": "#3A0A10",
+   "--p3": "#F5C928",
+   "--p3i": "#F5C928",
+   "--p3n": "#2E2200",
+   "--p4": "#D08ADB",
+   "--p4i": "#D08ADB",
+   "--p4n": "#2B0B33",
+   "--hero-a": "#0A3F85",
+   "--hero-b": "#8A1A26",
+   "--leaf1": "#78B0FF",
+   "--leaf2": "#4C8FD6",
+   "--stem": "#5C9CF0",
+   "--soil": "#5A4C3A",
+   "--pot": "#C4414D",
+   "--bloom": "#FF8D95",
+   "--bloom2": "#F5C928",
+   "--shadow": "0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35)",
+   "--shadow-up": "0 2px 4px rgba(0,0,0,.5),0 14px 30px rgba(0,0,0,.5)",
+   "--glow-a": "rgba(120,176,255,.10)",
+   "--glow-b": "rgba(255,141,149,.06)"
+  }
+ },
+ "docSections": {
+  "intro": "Introduction",
+  "agreement": "Essential Agreement"
+ }
+}
