@@ -108,7 +108,7 @@ function docApp(state) {
     openById: () => {
       if (!state.doc) throw new Error('No access');
       const d = state.doc;
-      if (d.tabs) { const tab = t => ({ asDocumentTab: () => ({ getBody: () => body(t.blocks) }), getChildTabs: () => (t.children || []).map(tab) }); return { getTabs: () => d.tabs.map(tab) }; }
+      if (d.tabs) { const tab = t => ({ getTitle: () => t.title || '', asDocumentTab: () => ({ getBody: () => body(t.blocks) }), getChildTabs: () => (t.children || []).map(tab) }); return { getTabs: () => d.tabs.map(tab) }; }
       return { getBody: () => body(d.blocks) };
     } };
 }

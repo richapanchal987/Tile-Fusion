@@ -20,7 +20,7 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `Art.html` | HTML | `Art` | 75 | 7 KB | `</script>` |
 | `Code.gs` | Script (.gs) | `Code` | 306 | 16 KB | `}` |
 | `Config.gs` | Script (.gs) | `Config` | 17 | 6 KB | `};` |
-| `DocSync.gs` | Script (.gs) | `DocSync` | 242 | 11 KB | `}` |
+| `DocSync.gs` | Script (.gs) | `DocSync` | 251 | 12 KB | `}` |
 | `Index.html` | HTML | `Index` | 25 | 1 KB | `</html>` |
 | `Logic.gs` | Script (.gs) | `Logic` | 400 | 20 KB | `}` |
 | `SeedData.gs` | Script (.gs) | `SeedData` | 57 | 20 KB | `};` |

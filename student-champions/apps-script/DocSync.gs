@@ -1,6 +1,7 @@
 /**
  * Module text from the Google Doc.
- * The doc is the source: every section starts with a Title-style heading ("Case Studies: 1", "POCSO, CPP & SPACE Model", ...).
+ * The doc is the source: each section is a TAB of the doc, named for its section ("Case Studies: 1", "POCSO, CPP & SPACE Model", ...).
+ * (A doc without tabs can use Title-style headings instead.)
  * An admin presses "Refresh from the doc" (and a nightly trigger does the same) to copy the text into the Content tab, so
  * trainees read it inside the app and never need access to the doc. Each task and module names its section in its
  * "Module text (doc section)" field; a refresh reports any name it cannot find.
@@ -151,20 +152,25 @@ function elementBlocks_(el) {
   return out;
 }
 
-/** Every tab of the doc, in order (a doc can hold several tabs). */
-function docBodies_(doc) {
+/** Every tab of the doc, in order, as {title, body}. A parent tab comes before its child tabs. */
+function docTabs_(doc) {
   if (typeof doc.getTabs === 'function') {
-    const bodies = [];
+    const out = [];
     const walk = tabs => tabs.forEach(tab => {
-      try { bodies.push(tab.asDocumentTab().getBody()); } catch (e) { /* not a document tab */ }
+      try { out.push({ title: String(tab.getTitle() || '').trim(), body: tab.asDocumentTab().getBody() }); } catch (e) { /* not a document tab */ }
       walk(tab.getChildTabs());
     });
     walk(doc.getTabs());
-    if (bodies.length) return bodies;
+    if (out.length) return out;
   }
-  return [doc.getBody()];
+  return [{ title: '', body: doc.getBody() }];
 }
 
+/**
+ * The doc as blocks. In a doc with several tabs, each tab is a section and its tab name is the section title
+ * (this is how the Student Champion module is laid out). A Title-style heading inside any tab also starts a section,
+ * which is how a doc without tabs works.
+ */
 function readDocBlocks_(docId) {
   let doc;
   try { doc = DocumentApp.openById(docId); }
@@ -174,8 +180,11 @@ function readDocBlocks_(docId) {
       ? 'The app has not been given permission to read Google Docs yet. Run the function again and approve the permission box, or check that appsscript.json lists https://www.googleapis.com/auth/documents. (' + why + ')'
       : 'The app could not open the module document (' + why + '). Share it with ' + (Session.getEffectiveUser().getEmail() || 'the app owner') + ' (view access is enough) and try again.');
   }
-  const blocks = [];
-  docBodies_(doc).forEach(body => { for (let i = 0; i < body.getNumChildren(); i++) elementBlocks_(body.getChild(i)).forEach(b => blocks.push(b)); });
+  const tabs = docTabs_(doc), blocks = [], useNames = tabs.length > 1;
+  tabs.forEach(tab => {
+    if (useNames && tab.title) blocks.push({ t: 'p', h: 'title', runs: [{ text: tab.title }] });
+    for (let i = 0; i < tab.body.getNumChildren(); i++) elementBlocks_(tab.body.getChild(i)).forEach(b => blocks.push(b));
+  });
   return blocks;
 }
 
@@ -188,7 +197,7 @@ function syncStatus_() {
 /** Copies the doc into the Content tab. Nothing is changed unless the whole doc was read and split successfully. */
 function syncModuleText_(by) {
   const sections = docBlocksToSections_(readDocBlocks_(PROGRAMME.app.moduleDocId));
-  if (!sections.length) throw new Error('The document has no Title-style headings, so no sections were found. Nothing was changed.');
+  if (!sections.length) throw new Error('The document has no sections: no tabs with names and no Title-style headings. Nothing was changed.');
   const rows = [];
   sections.forEach(s => s.parts.forEach((h, i) => rows.push([s.key, i + 1, s.title, h])));
   replaceRows_('Content', rows);

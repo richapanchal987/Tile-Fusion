@@ -88,9 +88,9 @@ A person can hold any combination: the Staff table has a role (Mentor/TL or Admi
 
 ## Module text from the Google Doc
 
-The doc is the source. Every section of the doc starts with a **Title-style heading** (for example "Case Studies: 1"), and each task names its section in **Curriculum > Edit task > Module text (doc section title)**. In **Curriculum**, the admin presses **Refresh from the doc** (it also runs by itself every night at about 2 am). The text is copied into the `Content` tab and shown inside each task under "Module text", so trainees never open the doc. The refresh reports any task whose section it cannot find, and any doc section nobody uses.
+The doc is the source. Each section of the module is a **tab of the doc**, and the **tab name** is the section title (for example "Case Studies: 1"). Each task names its tab in **Curriculum > Edit task > Module text (doc tab name)**. (A doc without tabs can use Title-style headings instead.) In **Curriculum**, the admin presses **Refresh from the doc** (it also runs by itself every night at about 2 am). The text is copied into the `Content` tab and shown inside each task under "Module text", so trainees never open the doc. The refresh reports any task whose section it cannot find, and any doc section nobody uses.
 
-- If someone renames a heading in the doc, that task shows "not in the app yet" until the task's *doc section title* is updated to match.
+- If someone renames a tab in the doc, that task shows "not in the app yet" until the task's *doc tab name* is updated to match.
 - Reads: headings, paragraphs, bold, italic, links, lists and tables, across all tabs of the doc. **Pictures are not carried over** (a note says so). Colours and fonts are not carried over.
 - If the owner's account cannot open the doc, the refresh says who to share it with, and nothing is lost.
 - Needs the **Docs permission** (`https://www.googleapis.com/auth/documents`, added to `appsscript.json`; the app only ever reads the doc); after updating the manifest you re-run `setup` once to approve it.

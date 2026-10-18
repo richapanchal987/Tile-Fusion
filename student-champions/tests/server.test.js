@@ -253,20 +253,27 @@ t('module text: the doc is copied into the app, with a report of what was missin
   assert.strictEqual(boot().sync.sections, b.sync.sections);
   me('asha@fsksurat.in', () => assert.strictEqual(boot().sync, undefined));
 });
-t('module text: a change in the doc shows after the next refresh; tabs are read in order', () => {
-  W.state.doc = { tabs: [{ blocks: [{ t: 'p', h: 'title', runs: [{ text: 'Introduction' }] }, { t: 'p', runs: [{ text: 'Edited intro' }] }], children: [{ blocks: [{ t: 'p', h: 'title', runs: [{ text: 'Viva' }] }, { t: 'p', runs: [{ text: 'Viva text' }] }] }] },
-    { blocks: [{ t: 'p', h: 'title', runs: [{ text: 'Q&A' }] }, { t: 'p', runs: [{ text: 'QA text' }] }] }] };
+t('module text: a change in the doc shows after the next refresh; each tab is a section named by its tab title, parent before children', () => {
+  const para = x => ({ t: 'p', runs: [{ text: x }] });
+  W.state.doc = { tabs: [{ title: 'Introduction', blocks: [para('Edited intro')], children: [{ title: 'Viva', blocks: [para('Viva text')] }] },
+    { title: 'Q&A', blocks: [para('QA text')] }] };
   const b = W.call('refreshModuleText', []);
   assert.strictEqual(b.sync.sections, 3); assert.ok(b.sync.missing.length > 20);
   assert.strictEqual(W.call('getContent', ['Introduction']).html, '<p>Edited intro</p>'); assert.strictEqual(W.call('getContent', ['Viva']).html, '<p>Viva text</p>');
+  assert.strictEqual(W.call('getContent', ['q and a']).found, true);
   assert.strictEqual(W.call('getContent', ['Case Studies: 1']).found, false, 'sections removed from the doc are removed from the app');
+});
+t('module text: a doc with a single tab ignores the tab name and uses Title-style headings', () => {
+  W.state.doc = { tabs: [{ title: 'Tab 1', blocks: [{ t: 'p', runs: [{ text: 'front matter' }] }, { t: 'p', h: 'title', runs: [{ text: 'Viva' }] }, { t: 'p', runs: [{ text: 'Viva text' }] }] }] };
+  const b = W.call('refreshModuleText', []);
+  assert.strictEqual(b.sync.sections, 1); assert.strictEqual(W.call('getContent', ['Tab 1']).found, false); assert.strictEqual(W.call('getContent', ['Viva']).html, '<p>Viva text</p>');
 });
 t('module text: if the doc cannot be opened or has no sections, nothing is lost and the reason is clear', () => {
   const before = W.sheets.Content.getLastRow();
   W.state.doc = null; throwsMsg(() => W.api.refreshModuleText(), /Share it with richa\.panchal@fsksurat\.in/);
-  W.state.doc = { blocks: [{ t: 'p', runs: [{ text: 'no titles here' }] }] }; throwsMsg(() => W.api.refreshModuleText(), /no Title-style headings/);
+  W.state.doc = { blocks: [{ t: 'p', runs: [{ text: 'no titles here' }] }] }; throwsMsg(() => W.api.refreshModuleText(), /no sections/);
   assert.strictEqual(W.sheets.Content.getLastRow(), before);
-  assert.strictEqual(W.call('getContent', ['Introduction']).found, true);
+  assert.strictEqual(W.call('getContent', ['Viva']).found, true);
 });
 t('module text: the nightly refresh cannot be started by an ordinary user', () => {
   W.state.doc = { blocks: docBlocks() };

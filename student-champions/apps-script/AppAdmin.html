@@ -19,7 +19,7 @@ function taskForm(){
     <div class="field"><label for="tf-type">Type</label><select class="big" id="tf-type" data-tf="type">${D.config.taskTypes.map(x=>`<option ${x===f.type?'selected':''}>${x}</option>`).join('')}</select></div>
     <div class="field"><label for="tf-weight">Weight within module</label><input type="number" min="0" step="0.5" id="tf-weight" data-tf="weight" value="${esc(f.weight)}"></div>
     <div class="field"><label for="tf-ai">AI tools (default)</label><select class="big" id="tf-ai" data-tf="ai">${Object.keys(D.config.aiOptions).map(a=>`<option value="${a}" ${f.ai===a?'selected':''}>${esc(D.config.aiOptions[a][0])}</option>`).join('')}</select></div>
-    <div class="field"><label for="tf-doc">Module text (doc section title)</label><input type="text" id="tf-doc" data-tf="doc" value="${esc(f.doc)}" placeholder="The Title heading in the Google Doc"></div></div>
+    <div class="field"><label for="tf-doc">Module text (doc tab name)</label><input type="text" id="tf-doc" data-tf="doc" value="${esc(f.doc)}" placeholder="The tab name in the Google Doc"></div></div>
     <div class="checks"><label><input type="checkbox" data-tf="gate" ${f.gate?'checked':''}> Critical gate (must be passed before certification)</label><label><input type="checkbox" data-tf="real" ${f.real?'checked':''}> Involves a real student (consent checklist first)</label>${f.real?`<label>Students needed <input type="number" min="1" max="10" data-tf="students" value="${esc(f.students||1)}" style="width:64px"></label>`:''}</div>
     <div class="field"><label for="tf-what">What the ${esc(WD.trainee)} will do</label><textarea id="tf-what" data-tf="what">${esc(f.what)}</textarea></div>
     <div class="field"><label for="tf-standard">Competency standard (summary; the rubric below is what is scored)</label><textarea id="tf-standard" data-tf="standard">${esc(f.standard)}</textarea></div>
@@ -44,9 +44,9 @@ function rubricEditor(t){
 function syncPanel(){
   const s=D.sync;
   return`<section class="topic"><h3>Module text from the Google Doc</h3>
-    <p class="hint">The text of every task comes from &ldquo;${esc(D.config.docName)}&rdquo;. Each section starts with a Title heading in the doc. ${esc(WD.Trainees)} read it in the app and never need access to the doc. Press the button after editing the doc; it also refreshes by itself every night.</p>
+    <p class="hint">The text of every task comes from &ldquo;${esc(D.config.docName)}&rdquo;. Each section is a tab of the doc, and the tab name is the section title. ${esc(WD.Trainees)} read it in the app and never need access to the doc. Press the button after editing the doc; it also refreshes by itself every night.</p>
     ${s?`<p>Last refreshed ${esc(s.at)} by ${esc(s.by)}: ${s.sections} sections, ${Math.round(s.characters/1000)}k characters.</p>
-      ${s.missing.length?`<div class="note amber"><b>Not found in the doc (${s.missing.length}):</b> ${s.missing.map(esc).join('; ')}. Check the spelling of the doc section title on the task, or the Title heading in the doc.</div>`:'<p class="chip good">Every task found its section.</p>'}
+      ${s.missing.length?`<div class="note amber"><b>Not found in the doc (${s.missing.length}):</b> ${s.missing.map(esc).join('; ')}. Check that the doc section title on the task matches the tab name in the doc.</div>`:'<p class="chip good">Every task found its section.</p>'}
       ${s.unused.length?`<p class="hint">In the doc but not used by any task: ${s.unused.map(esc).join('; ')}.</p>`:''}`:'<p class="note amber">Not refreshed yet. Press the button to bring the module text in.</p>'}
     <div class="row"><button class="btn" data-act="sync">Refresh from the doc</button></div></section>`;
 }
