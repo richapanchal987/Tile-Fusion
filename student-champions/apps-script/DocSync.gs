@@ -168,7 +168,12 @@ function docBodies_(doc) {
 function readDocBlocks_(docId) {
   let doc;
   try { doc = DocumentApp.openById(docId); }
-  catch (e) { throw new Error('The app\'s owner cannot open the module document. Share it with ' + (Session.getEffectiveUser().getEmail() || 'the owner') + ' (view access is enough) and try again.'); }
+  catch (e) {
+    const why = String((e && e.message) || e);
+    throw new Error(/permission|authori[sz]/i.test(why) && /documents/i.test(why)
+      ? 'The app has not been given permission to read Google Docs yet. Run the function again and approve the permission box, or check that appsscript.json lists https://www.googleapis.com/auth/documents. (' + why + ')'
+      : 'The app could not open the module document (' + why + '). Share it with ' + (Session.getEffectiveUser().getEmail() || 'the app owner') + ' (view access is enough) and try again.');
+  }
   const blocks = [];
   docBodies_(doc).forEach(body => { for (let i = 0; i < body.getNumChildren(); i++) elementBlocks_(body.getChild(i)).forEach(b => blocks.push(b)); });
   return blocks;

@@ -93,7 +93,7 @@ The doc is the source. Every section of the doc starts with a **Title-style head
 - If someone renames a heading in the doc, that task shows "not in the app yet" until the task's *doc section title* is updated to match.
 - Reads: headings, paragraphs, bold, italic, links, lists and tables, across all tabs of the doc. **Pictures are not carried over** (a note says so). Colours and fonts are not carried over.
 - If the owner's account cannot open the doc, the refresh says who to share it with, and nothing is lost.
-- Needs the **Docs permission** (added to `appsscript.json`); after updating the manifest you re-run `setup` once to approve it.
+- Needs the **Docs permission** (`https://www.googleapis.com/auth/documents`, added to `appsscript.json`; the app only ever reads the doc); after updating the manifest you re-run `setup` once to approve it.
 
 ## Look and feel
 
