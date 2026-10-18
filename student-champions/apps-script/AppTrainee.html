@@ -116,8 +116,10 @@ function evidenceView(tr,t,p){
 /* ---------- rubric, consent checklist, task plan ---------- */
 const levelHelp=n=>`<li><b>${n} ${esc(SCALE[n])}</b> ${esc(D.config.scaleHelp[n])}</li>`;
 function rubricView(t){
-  const rows=D.rubrics.filter(r=>r.task===t.id);
-  if(!rows.length)return`<p>${esc(t.standard)}</p>`;
+  const rows=D.rubrics.filter(r=>r.task===t.id),staff=isStaff();
+  // The competency standard is for mentors, TLs and admins. A trainee sees rubric rows only where the rubric is shown to them.
+  const noScored=!rows.some(r=>r.use==='score'),note=noScored&&!staff?'<p class="hint">Your mentor or TL scores this task against the competency standard for the role.</p>':'';
+  if(!rows.length)return staff?`<p>${esc(t.standard)}</p>`:note;
   const groups=[],by={};
   rows.forEach(r=>{const k=r.use+'|'+r.group;if(!by[k]){by[k]={use:r.use,group:r.group,rows:[]};groups.push(by[k])}by[k].rows.push(r)});
   const crit=r=>`<div class="crit"><b>${esc(r.criterion)}</b>${r.evaluated?`<p class="hint">${esc(r.evaluated)}</p>`:''}${r.levels.some(Boolean)?`<ul class="lvl">${r.levels.map((x,i)=>`<li><b>${i+1}</b> ${esc(x||'')}</li>`).join('')}</ul>`:''}</div>`;
@@ -126,7 +128,7 @@ function rubricView(t){
     return head?`<details class="rgroup" data-key="${esc(k)}" ${openSet.has(k)?'open':''}><summary>${esc(head.length>110?head.slice(0,107)+'…':head)}</summary>${head.length>110?`<p class="hint">${esc(head)}</p>`:''}${g.rows.map(crit).join('')}</details>`:g.rows.map(crit).join('');
   }).join('');
   const n=rows.filter(r=>r.use==='score').length,k='rub|'+t.id;
-  return`<details class="rubric" data-key="${esc(k)}" ${openSet.has(k)?'open':''}><summary>${n} criteri${n===1?'on':'a'}, scored 1 to 4</summary><ul class="lvl generic">${[4,3,2,1].map(levelHelp).join('')}</ul>${body}<p class="hint">The task score is the average of the criterion scores, rounded up at .5.${t.gate?` A critical gate needs ${D.config.passScore} or more.`:''}</p></details>`;
+  return`${note}<details class="rubric" data-key="${esc(k)}" ${openSet.has(k)?'open':''}><summary>${n?`${n} criteri${n===1?'on':'a'}, scored 1 to 4`:'Reference only'}</summary><ul class="lvl generic">${[4,3,2,1].map(levelHelp).join('')}</ul>${body}<p class="hint">The task score is the average of the criterion scores, rounded up at .5.${t.gate?` A critical gate needs ${D.config.passScore} or more.`:''}</p></details>`;
 }
 
 function checklistBox(tr,t,mine,editable){
@@ -183,6 +185,7 @@ function taskCard(tr,t,mine){
       <div class="kv"><h4>Agreed with your mentor or TL</h4><p>${p.due?`<span class="chip ${ds==='overdue'?'bad':ds==='soon'?'warn':''}">${ico('calendar',13)} ${dueText(p)}</span> `:'<span class="hint">No due date set yet. </span>'}<span class="chip ai-${ak}" title="${esc(aiTip)}">AI: ${esc(D.config.aiOptions[ak][0])}</span> ${t.real?'<span class="chip warn">Real student: consent checklist first</span>':''}</p><p class="hint">${esc(aiTip)} ${esc(D.config.aiRule)}</p></div>
       ${docBox(t.doc)}
       <div class="kv"><h4>How you'll be assessed</h4>${rubricView(t)}${t.gate?`<p class="hint">Critical gate: needs Complete with a score of ${D.config.passScore} or more.</p>`:''}</div>
+      ${staff&&t.standard?`<div class="kv"><h4>Competency standard <span class="hint">(mentors, TLs and admins only)</span></h4><p>${esc(t.standard)}</p></div>`:''}
       <div class="kv"><h4>Evidence to submit</h4><p>${esc(t.evidence)}</p></div>
       <div class="kv"><h4>Resources</h4><ul class="res">${res.map(r=>`<li>${isUrl(r.url)?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.label)}</a>`:`<span>${esc(r.label)}</span><span class="nolink">link not added yet</span>`}${r.note?`<span class="hint">${esc(r.note)}</span>`:''}</li>`).join('')||'<li class="nolink">No resources yet</li>'}</ul></div>
       ${staff?`<p class="hint">Counts ${t.w}% toward training completion.</p>`:''}

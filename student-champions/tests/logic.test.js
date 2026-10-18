@@ -220,13 +220,26 @@ t('visibility: mentors, TL and certifying mentor see their trainee; unassigned t
 });
 
 t('bootstrap: a trainee gets only their own data and the end date; staff get task and module details; nobody enrolled gets nothing', () => {
-  const db = newDb(); db.rubrics = [{ task: '1.1', order: 1, use: 'score', group: '', criterion: 'c', evaluated: '', levels: ['', '', '', ''] }];
+  const db = newDb(); db.rubrics = [{ task: '1.1', order: 1, use: 'score', show: true, group: '', criterion: 'c', evaluated: '', levels: ['', '', '', ''] }];
   const cfg = { appName: 'x' }, me = { role: 'Trainee', email: 'a@fsksurat.in' };
   const b = L.buildBootstrap_(db, me, '2026-06-02', cfg);
   assert.strictEqual(b.trainees.length, 1); assert.strictEqual(b.trainees[0].end, '2026-09-01'); assert.strictEqual(b.config.cycles, 13);
   assert.strictEqual(b.tasks.length, 32); assert.strictEqual(b.topics[0].note, ''); assert.strictEqual(b.staff, undefined); assert.strictEqual(b.rubrics.length, 1);
   assert.strictEqual(L.buildBootstrap_(db, { role: 'Admin', email: 'admin@fsksurat.in' }, '2026-06-02', cfg).trainees.length, 2);
   assert.strictEqual(L.buildBootstrap_(db, { role: 'None', email: 'q@x' }, '2026-06-02', cfg).tasks, undefined);
+});
+t('competency standard: staff receive it; a trainee never receives it, nor the rubric rows hidden from them', () => {
+  const db = newDb(); db.rubrics = [{ task: '2.1', order: 1, use: 'score', show: false, group: '', criterion: 'Can explain the programme', evaluated: '', levels: ['', '', '', ''] },
+    { task: '1.1', order: 1, use: 'score', show: true, group: '', criterion: 'Role', evaluated: 'what is judged', levels: ['', '', '', ''] }];
+  const std = id => db.tasks.find(x => x.id === id).standard;
+  assert.ok(std('2.1').length > 10);
+  const tr = L.buildBootstrap_(db, { role: 'Trainee', email: 'a@fsksurat.in' }, '2026-06-02', {});
+  assert.ok(tr.tasks.every(x => x.standard === '')); assert.strictEqual(tr.rubrics.map(r => r.task).join(','), '1.1');
+  assert.ok(!JSON.stringify(tr).includes(std('2.1')) && !JSON.stringify(tr).includes('Can explain the programme'), 'the standard is nowhere in what the trainee receives');
+  for (const role of ['Assessor', 'Admin']) {
+    const st = L.buildBootstrap_(db, { role, email: role === 'Admin' ? 'admin@fsksurat.in' : 'tl@fsksurat.in' }, '2026-06-02', {});
+    assert.strictEqual(st.tasks.find(x => x.id === '2.1').standard, std('2.1')); assert.strictEqual(st.rubrics.length, 2); assert.strictEqual(st.rubrics.find(r => r.task === '2.1').show, false);
+  }
 });
 t('pace: the calendar expects 0 at the start and 100 by the end', () => {
   const db = newDb();

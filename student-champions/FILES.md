@@ -9,16 +9,16 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | File | Type | Name in the editor | Lines | Size | Last line |
 |---|---|---|---|---|---|
 | `Actions.gs` | Script (.gs) | `Actions` | 170 | 9 KB | `}` |
-| `Admin.gs` | Script (.gs) | `Admin` | 227 | 13 KB | `}` |
-| `AppAdmin.html` | HTML | `AppAdmin` | 99 | 19 KB | `</script>` |
-| `AppAssess.html` | HTML | `AppAssess` | 77 | 8 KB | `</script>` |
+| `Admin.gs` | Script (.gs) | `Admin` | 228 | 13 KB | `}` |
+| `AppAdmin.html` | HTML | `AppAdmin` | 100 | 19 KB | `</script>` |
+| `AppAssess.html` | HTML | `AppAssess` | 78 | 8 KB | `</script>` |
 | `AppCore.html` | HTML | `AppCore` | 127 | 11 KB | `</script>` |
 | `AppEvents.html` | HTML | `AppEvents` | 113 | 9 KB | `</script>` |
 | `AppFiles.html` | HTML | `AppFiles` | 87 | 7 KB | `</script>` |
 | `AppTeam.html` | HTML | `AppTeam` | 52 | 8 KB | `</script>` |
-| `AppTrainee.html` | HTML | `AppTrainee` | 193 | 21 KB | `</script>` |
+| `AppTrainee.html` | HTML | `AppTrainee` | 196 | 21 KB | `</script>` |
 | `Art.html` | HTML | `Art` | 75 | 7 KB | `</script>` |
-| `Code.gs` | Script (.gs) | `Code` | 306 | 16 KB | `}` |
+| `Code.gs` | Script (.gs) | `Code` | 322 | 17 KB | `}` |
 | `Config.gs` | Script (.gs) | `Config` | 17 | 6 KB | `};` |
 | `DocSync.gs` | Script (.gs) | `DocSync` | 251 | 12 KB | `}` |
 | `Index.html` | HTML | `Index` | 25 | 1 KB | `</html>` |

@@ -172,12 +172,13 @@ function saveRubric(taskId, rows) {
     const task = ctx.db.tasks.find(x => x.id === String(taskId).trim());
     if (!task) throw new Error('That task no longer exists.');
     const clean = (rows || []).map(r => ({ group: str_(r.group, 3000), criterion: str_(r.criterion, 300), evaluated: str_(r.evaluated, 1500),
-      levels: [0, 1, 2, 3].map(i => str_((r.levels || [])[i], 600)), use: r.use === 'reference' ? 'reference' : 'score' })).filter(r => r.criterion);
+      levels: [0, 1, 2, 3].map(i => str_((r.levels || [])[i], 600)), use: r.use === 'reference' ? 'reference' : 'score',
+      show: !(r.show === false || r.show === 'No' || r.show === 0 || r.show === '0') })).filter(r => r.criterion);
     if (!clean.some(r => r.use === 'score')) throw new Error('Keep at least one criterion that is used for scoring, or the assessor will have no rubric to score.');
     const keep = ctx.db.rubrics.filter(r => r.task !== task.id);
-    const mine = clean.map((r, i) => ({ task: task.id, order: i + 1, use: r.use, group: r.group, criterion: r.criterion, evaluated: r.evaluated, levels: r.levels }));
+    const mine = clean.map((r, i) => ({ task: task.id, order: i + 1, use: r.use, group: r.group, criterion: r.criterion, evaluated: r.evaluated, levels: r.levels, show: r.show }));
     const all = keep.concat(mine);
-    replaceRows_('Rubrics', all.map(r => [r.task, r.order, r.use, r.group, r.criterion, r.evaluated, r.levels[0], r.levels[1], r.levels[2], r.levels[3]]));
+    replaceRows_('Rubrics', all.map(r => [r.task, r.order, r.use, r.group, r.criterion, r.evaluated, r.levels[0], r.levels[1], r.levels[2], r.levels[3], r.show === false ? 'No' : 'Yes']));
     logAction_(ctx.me, 'Saved rubric', '', task.id, mine.length + ' criteria');
     return getBootstrap();
   });

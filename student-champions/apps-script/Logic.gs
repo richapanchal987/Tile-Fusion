@@ -284,17 +284,17 @@ function buildBootstrap_(db, me, todayIso, appConfig) {
 
   // A long group text (a case-study scenario) is repeated on every row of its group, so send each text once and refer to it by number.
   const rubricGroups = { list: [], rows: [] };
-  db.rubrics.forEach(r => {
+  db.rubrics.filter(r => staff || r.show).forEach(r => {      // a trainee never receives rows hidden from them
     let g = rubricGroups.list.indexOf(r.group);
     if (g < 0) { rubricGroups.list.push(r.group); g = rubricGroups.list.length - 1; }
-    rubricGroups.rows.push({ task: r.task, order: r.order, use: r.use, g: g, criterion: r.criterion, evaluated: r.evaluated, levels: r.levels });
+    rubricGroups.rows.push({ task: r.task, order: r.order, use: r.use, show: r.show, g: g, criterion: r.criterion, evaluated: r.evaluated, levels: r.levels });
   });
   const out = {
     me: me, config: config,
     topics: db.topics.map(t => ({ id: t.id, name: t.name, w: t.weight, phase: t.phase, need: t.threshold, doc: t.doc, note: staff ? t.note : '' })),
     tasks: (staff ? allTasks : activeTasks).map(t => ({
       id: t.id, topic: t.topic, cycle: t.cycle, name: t.name, type: t.type, what: t.what, evidence: t.evidence,
-      standard: t.standard, weight: t.weight, gate: t.gate, active: t.active, order: t.order, ai: t.ai, real: t.real, students: t.students, doc: t.doc,
+      standard: staff ? t.standard : '', weight: t.weight, gate: t.gate, active: t.active, order: t.order, ai: t.ai, real: t.real, students: t.students, doc: t.doc,
       phase: topicPhase[t.topic] || '', w: Math.round((eff[t.id] || 0) * 10) / 10
     })),
     rubricGroups: rubricGroups.list, rubrics: rubricGroups.rows, res: db.resources,

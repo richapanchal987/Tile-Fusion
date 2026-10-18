@@ -27,7 +27,7 @@ const SHEETS = {
   Topics: ['Topic ID', 'Topic', 'Weight %', 'Phase', 'Pass mark %', 'Module text (doc section)', 'Internal notes'],
   Tasks: ['Task ID', 'Topic ID', 'Cycle', 'Task', 'Type', 'What the trainee will do', 'Evidence / Output', 'Competency standard',
           'Weight within topic', 'Critical gate', 'Active', 'Order', 'AI use', 'Real student', 'Students needed', 'Module text (doc section)'],
-  Rubrics: ['Task ID', 'Order', 'Use', 'Group', 'Criterion', 'What is being evaluated', 'Level 1', 'Level 2', 'Level 3', 'Level 4'],
+  Rubrics: ['Task ID', 'Order', 'Use', 'Group', 'Criterion', 'What is being evaluated', 'Level 1', 'Level 2', 'Level 3', 'Level 4', 'Shown to trainee'],
   Resources: ['Topic ID', 'Task ID', 'Resource', 'Link', 'Note'],
   Staff: ['Email', 'Name', 'Role', 'Certifies'],
   Trainees: ['Email', 'Name', 'Mentors', 'Team leader', 'Certifying mentor', 'Start date', 'Active', 'Certification', 'Certified by',
@@ -95,7 +95,7 @@ function setup() {
 function seedRubricRows_() {
   const rows = [];
   SEED_RUBRIC_PARTS().forEach(part => part.forEach(r => {
-    rows.push([r.task, r.order, r.use, SEED_RUBRIC_GROUPS[r.group] || '', r.criterion, r.evaluated, r.levels[0], r.levels[1], r.levels[2], r.levels[3]]);
+    rows.push([r.task, r.order, r.use, SEED_RUBRIC_GROUPS[r.group] || '', r.criterion, r.evaluated, r.levels[0], r.levels[1], r.levels[2], r.levels[3], '']);
   }));
   return rows;
 }
@@ -172,6 +172,23 @@ function readStaff_() {
   return rows_('Staff').map(r => ({ email: norm_(r[0]), name: String(r[1] || r[0]), role: /admin/i.test(r[2]) ? 'Admin' : 'Assessor', certifies: yes_(r[3]) }));
 }
 
+/**
+ * Rubric rows. "Shown to trainee" is Yes or No. When it is blank, rows built only from the competency standard (plain criteria
+ * with no description, group or level text) are hidden from trainees, and rows from the workbook's rubric tabs are shown.
+ */
+function readRubrics_() {
+  const rows = rows_('Rubrics').map(r => ({ task: String(r[0]).trim(), order: num_(r[1]), use: String(r[2]).trim() === 'reference' ? 'reference' : 'score',
+    group: String(r[3] || ''), criterion: String(r[4] || ''), evaluated: String(r[5] || ''), levels: [r[6], r[7], r[8], r[9]].map(x => String(x || '')),
+    cell: String(r[10] || '').trim().toLowerCase() }));
+  const plain = {};
+  rows.filter(r => r.use === 'score').forEach(r => {
+    const rich = !!(r.group || r.evaluated || r.levels.some(Boolean));
+    plain[r.task] = (plain[r.task] === undefined ? true : plain[r.task]) && !rich;
+  });
+  rows.forEach(r => { r.show = r.cell === 'no' ? false : r.cell === 'yes' ? true : (r.use === 'reference' || !plain[r.task]); delete r.cell; });
+  return rows;
+}
+
 function readDb_() {
   const settings = Object.assign({}, SEED.settings);
   rows_('Settings').forEach(r => { const k = String(r[0]).trim(); if (k in settings) settings[k] = num_(r[1], settings[k]); });
@@ -187,8 +204,7 @@ function readDb_() {
       gate: yes_(r[9]), active: String(r[10]).trim() === '' ? true : yes_(r[10]), order: num_(r[11], 9999),
       ai: AI_KEYS.indexOf(String(r[12]).trim()) > -1 ? String(r[12]).trim() : 'ask', real: yes_(r[13]), students: num_(r[14], 0), doc: String(r[15] || '')
     })),
-    rubrics: rows_('Rubrics').map(r => ({ task: String(r[0]).trim(), order: num_(r[1]), use: String(r[2]).trim() === 'reference' ? 'reference' : 'score',
-      group: String(r[3] || ''), criterion: String(r[4] || ''), evaluated: String(r[5] || ''), levels: [r[6], r[7], r[8], r[9]].map(x => String(x || '')) })),
+    rubrics: readRubrics_(),
     resources: rows_('Resources').map(r => ({ topic: num_(r[0]), task: String(r[1] || '').trim(), label: String(r[2] || ''), url: String(r[3] || ''), note: String(r[4] || '') })),
     staff: readStaff_(),
     trainees: rows_('Trainees').map(r => ({

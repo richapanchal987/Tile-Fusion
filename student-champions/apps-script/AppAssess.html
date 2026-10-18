@@ -69,6 +69,7 @@ function vReview(){
     <div class="rvhead"><div class="rvwho"><span class="avatar" aria-hidden="true">${esc(initials(tr.name))}</span><div><p class="who">${esc(tr.name)}</p><p class="muted">${WD.Cycle} ${t.cycle}${p.submitted?', submitted '+fmtDate(p.submitted):''} <button class="linkbtn" data-act="open" data-id="${esc(tr.id)}">Open full training</button></p></div></div><div class="pills">${t.gate?`<span class="pill gate">${ico('shield',13)}Critical gate</span>`:''}${p.failed?`<span class="pill s-partial">Attempt ${p.failed+1}</span>`:''}${p.due?`<span class="pill">${ico('calendar',13)}${dueText(p)}</span>`:''}</div></div>
     <h3>${esc(t.id)} ${esc(t.name)}</h3>
     <div class="kv"><h4>What was asked</h4><p>${esc(t.what)}</p></div>
+    ${t.standard?`<div class="kv"><h4>Competency standard <span class="hint">(not shown to the ${esc(WD.trainee)})</span></h4><p>${esc(t.standard)}</p></div>`:''}
     <div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>
     ${p.reflection?`<div class="kv"><h4>${esc(WD.Trainee)}'s reflection</h4><p>${esc(p.reflection)}</p></div>`:''}
     ${p.feedback?`<div class="note amber"><b>Earlier feedback:</b> ${esc(p.feedback)}</div>`:''}

@@ -63,7 +63,7 @@ document.addEventListener('click',e=>{
     case'task-archive':run('setTaskActive',[ds.id,false],'Task archived');break;
     case'task-restore':run('setTaskActive',[ds.id,true],'Task restored');break;
     case'rub-edit':UI.rubTask=ds.id;UI.editTask=null;UI.rub=D.rubrics.filter(r=>r.task===ds.id).map(r=>Object.assign({},r,{levels:r.levels.slice()}));render();break;
-    case'rub-add':UI.rub.push({group:'',criterion:'',evaluated:'',levels:['','','',''],use:'score'});render();break;
+    case'rub-add':UI.rub.push({group:'',criterion:'',evaluated:'',levels:['','','',''],use:'score',show:true});render();break;
     case'rub-del':UI.rub.splice(+ds.i,1);render();break;
     case'rub-cancel':UI.rubTask=null;UI.rub=null;render();break;
     case'rub-save':run('saveRubric',[UI.rubTask,UI.rub],'Rubric saved',null,()=>{UI.rubTask=null;UI.rub=null});break;
@@ -81,7 +81,7 @@ document.addEventListener('input',e=>{
   if(ds.tpf)UI.tpf[ds.tpf]=el.value;
   if(ds.tf)UI.tf[ds.tf]=el.type==='checkbox'?el.checked:(['topic','cycle','students'].includes(ds.tf)?+el.value:el.value);
   if(ds.rs)RES[ds.rs][+ds.i][ds.rf]=el.value;
-  if(ds.rb!=null){const r=UI.rub[+ds.rb];if(ds.rl!=null)r.levels[+ds.rl]=el.value;else r[ds.rf]=el.value}
+  if(ds.rb!=null){const r=UI.rub[+ds.rb];if(ds.rl!=null)r.levels[+ds.rl]=el.value;else r[ds.rf]=ds.rf==='show'?el.value==='1':el.value}
 });
 
 document.addEventListener('change',async e=>{

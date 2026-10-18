@@ -68,6 +68,21 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     assert.deepStrictEqual(p.errors, []); await p.context().close();
   });
 
+  await step('competency standard: not visible to the trainee, visible to the mentor/TL on the task and in Reviews', async () => {
+    const STD = 'Can explain the SC programme';
+    const t = await open(browser, 'asha@fsksurat.in'); await t.locator('.node[data-c="3"]').click();
+    const tc = await openCard(t, 'About the school');
+    const txt = await tc.innerText();
+    assert.ok(!txt.includes(STD) && !/Competency standard/i.test(txt.replace(/competency standard for the role/i, '')), 'the trainee sees neither the standard nor a heading for it');
+    assert.ok(txt.includes('scores this task against the competency standard for the role'));
+    assert.ok(!(await t.content()).includes(STD), 'it is not even in the page');
+    await t.context().close();
+    const p = await open(browser, 'tl@fsksurat.in'); await p.locator('.tab', { hasText: 'Trainee' }).click(); await p.locator('select[data-act=pick]').selectOption('asha@fsksurat.in'); await p.locator('.node[data-c="3"]').click();
+    const c = await openCard(p, 'About the school');
+    assert.ok((await c.innerText()).includes('Competency standard') && (await c.innerText()).includes(STD));
+    await p.context().close();
+  });
+
   await step('trainee: a real-student task needs a consent checklist with a student code before it can be submitted', async () => {
     W.as(ADMIN); ['6.1', '6.2'].forEach(id => W.call('assessTask', ['asha@fsksurat.in', id, { score: 3, criteria: Object.fromEntries(W.call('getBootstrap').rubrics.filter(r => r.task === id).map(r => [r.order, 3])), feedback: 'ok' }]));
     const p = await open(browser, 'asha@fsksurat.in');

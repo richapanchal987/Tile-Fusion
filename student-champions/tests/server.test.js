@@ -208,6 +208,27 @@ t('module editing: modules, tasks, resources and settings validate their input',
   throwsMsg(() => W.api.saveResources(1, '', [{ label: 'x', url: 'ftp://x' }]), /http/);
   assert.strictEqual(W.call('saveResources', [1, '', [{ label: 'SOP', url: 'https://x.example/sop', note: '' }]]).res.length, 1);
 });
+t('competency standard: hidden from trainees (text and rubric rows built from it), shown to mentors, TLs and admins; scoring still works', () => {
+  const std = boot().tasks.find(x => x.id === '2.1').standard; assert.ok(std.length > 20);
+  me('asha@fsksurat.in', () => {
+    const b = boot(); assert.ok(b.tasks.every(x => x.standard === ''));
+    assert.strictEqual(b.rubrics.filter(r => r.task === '2.1').length, 0, 'plain criteria built from the standard are not sent to a trainee');
+    assert.ok(b.rubrics.filter(r => r.task === '1.1').length === 14, 'rubrics from the workbook tabs are');
+    assert.ok(!JSON.stringify(b).includes(std));
+  });
+  ['mentor@fsksurat.in', 'tl@fsksurat.in', ADMIN].forEach(e => me(e, () => { const b = boot(); assert.strictEqual(b.tasks.find(x => x.id === '2.1').standard, std); assert.ok(b.rubrics.filter(r => r.task === '2.1').length >= 2); }));
+  me('mentor@fsksurat.in', () => W.call('assessTask', ['bina@fsksurat.in', '2.1', { criteria: crit(boot(), '2.1', 3), feedback: '' }]));
+  assert.strictEqual(tr(boot(), 'bina@fsksurat.in').p['2.1'].score, 3);
+});
+t('rubric editing: an admin can choose which criteria a trainee sees; the choice is kept', () => {
+  const rows = boot().rubrics.filter(r => r.task === '2.3').map(r => Object.assign({}, r, { show: true }));
+  W.call('saveRubric', ['2.3', rows]);
+  me('asha@fsksurat.in', () => assert.strictEqual(boot().rubrics.filter(r => r.task === '2.3').length, rows.length));
+  W.call('saveRubric', ['2.3', rows.map((r, i) => Object.assign({}, r, { show: i !== 0 }))]);
+  me('asha@fsksurat.in', () => assert.strictEqual(boot().rubrics.filter(r => r.task === '2.3').length, rows.length - 1));
+  assert.strictEqual(boot().rubrics.find(r => r.task === '2.3' && r.order === 1).show, false);
+  assert.strictEqual(W.sheets.Rubrics.get(1, 11), 'Shown to trainee');
+});
 t('rubric editing: an admin can change criteria and levels; at least one scored criterion must remain; reference rows are never scored', () => {
   const rows = boot().rubrics.filter(r => r.task === '3.1');
   assert.strictEqual(rows.length, 1);
@@ -293,9 +314,9 @@ t('the activity log is for admins only and records submissions, assessments, pla
   W.as('tl@fsksurat.in'); throwsMsg(() => W.api.getActivityLog(), /admin/); W.as(ADMIN);
 });
 t('typed text starting with = is stored as text, not a formula (cell format is plain text)', () => {
-  W.as('bina@fsksurat.in'); W.call('saveMyTask', ['2.1', 'save', '=HYPERLINK("http://x")', '+1 note']);
+  W.as('bina@fsksurat.in'); W.call('saveMyTask', ['3.2', 'save', '=HYPERLINK("http://x")', '+1 note']);
   const r = W.sheets.Progress; let found = false;
-  for (let i = 2; i <= r.getLastRow(); i++) if (r.get(i, 1) === 'bina@fsksurat.in' && r.get(i, 2) === '2.1') { found = true; assert.strictEqual(r.get(i, 4), '=HYPERLINK("http://x")'); }
+  for (let i = 2; i <= r.getLastRow(); i++) if (r.get(i, 1) === 'bina@fsksurat.in' && r.get(i, 2) === '3.2') { found = true; assert.strictEqual(r.get(i, 4), '=HYPERLINK("http://x")'); }
   assert.ok(found); W.as(ADMIN);
 });
 
