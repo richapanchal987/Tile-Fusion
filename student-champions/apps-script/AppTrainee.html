@@ -135,7 +135,7 @@ function checklistBox(tr,t,mine,editable){
   if(!t.real)return'';
   const need=Math.max(1,t.students),done=tr.lists.filter(c=>c.task===t.id),ck=D.config.checklist;
   const form=mine&&editable?`<div class="myform checkform" data-t="${esc(t.id)}"><p class="hint">${esc(ck.intro)}</p>
-    <div class="field"><label for="cl-${slug(t.id)}">Student code (for example ${esc(ck.codeExample)})</label><input type="text" id="cl-${slug(t.id)}" data-cl="code" placeholder="${esc(ck.codeExample)}" autocomplete="off"></div>
+    <div class="field"><label for="cl-${slug(t.id)}">Student code</label><input type="text" id="cl-${slug(t.id)}" data-cl="code" placeholder="The code you use for this student" autocomplete="off"></div>
     ${ck.groups.map((g,gi)=>`<fieldset class="clgroup"><legend>${esc(g[0])}</legend>${g[1].map((x,xi)=>`<label class="clitem"><input type="checkbox" data-cl="item"> <span>${esc(x)}</span></label>`).join('')}</fieldset>`).join('')}
     <div class="row"><button class="btn small" data-act="checklist">Save checklist for this student</button></div></div>`:'';
   return`<div class="kv"><h4>${esc(ck.title)}</h4><p class="${done.length>=need?'':'warnline'}">${done.length} of ${need} student${need===1?'':'s'} done${done.length?': '+done.map(c=>`<span class="code">${esc(c.code)}</span>`).join(' '):''}. ${done.length>=need?'You can submit this task.':'Complete this before the task begins; it is needed before you can submit.'}</p>${form}</div>`;
@@ -168,7 +168,7 @@ function taskCard(tr,t,mine){
       <div class="field"><label for="ev-${sl}">Link or reference to your evidence</label><input type="text" id="ev-${sl}" data-f="evidence" value="${esc(ev)}" placeholder="A restricted Drive link, or a Nucleus reference"></div>
       ${filesHtml(tr,t,p,true)}
       <div class="filepick"><input type="file" id="up-${sl}" data-up="${esc(t.id)}"><label class="btn ghost small" for="up-${sl}">Attach a file</label> <span class="hint">PDF, Word (.docx), image, text, mp3, m4a or mp4 can be viewed directly in the app; other Office files can only be downloaded, so a PDF is best. Up to ${D.config.maxUploadMb} MB each, ${D.config.maxFiles} files. For anything larger, paste a link.</span></div>
-      <div class="field"><label for="rf-${sl}">Reflection (optional)</label><textarea id="rf-${sl}" data-f="reflection" placeholder="What went well, what you would do differently, what you are unsure about">${esc(rf)}</textarea><span class="hint">Never write a student's name or details that identify them. Use the student code, for example ${esc(D.config.checklist.codeExample)}.</span></div>
+      <div class="field"><label for="rf-${sl}">Reflection (optional)</label><textarea id="rf-${sl}" data-f="reflection" placeholder="What went well, what you would do differently, what you are unsure about">${esc(rf)}</textarea><span class="hint">Never write a student's name or details that identify them. Use the student code.</span></div>
       <div class="row"><button class="btn ghost" data-act="save">Save draft</button><button class="btn" data-act="submit" ${blocked?'disabled':''}>Submit for review</button>${!listsOk?'<span class="hint">Complete the consent checklist above first.</span>':left<=0?'<span class="hint">No reattempts left.</span>':''}</div></div>`;
   }else if(p.status!=='not'||p.evidence||(p.files||[]).length){
     block+=`<div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>${p.reflection?`<div class="kv"><h4>${esc(WD.Trainee)}'s reflection</h4><p>${esc(p.reflection)}</p></div>`:''}`;

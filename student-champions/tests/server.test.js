@@ -95,16 +95,16 @@ t('a trainee cannot see another trainee, assess, plan, certify or edit the modul
 t('real-student tasks: the consent checklist comes first, uses a student code, and one is needed per student', () => {
   W.as('asha@fsksurat.in');
   throwsMsg(() => W.api.saveMyTask('6.3', 'submit', 'notes', ''), /consent checklist for 2 students/);
-  throwsMsg(() => W.api.saveChecklist('6.3', 'Meera Shah', tick()), /student code/);
+  throwsMsg(() => W.api.saveChecklist('6.3', '', tick()), /Enter the student code/);
+  throwsMsg(() => W.api.saveChecklist('6.3', 'x'.repeat(41), tick()), /short/);
   throwsMsg(() => W.api.saveChecklist('6.3', 'G10-S1', tick().map((x, i) => i !== 2)), /every item/);
   throwsMsg(() => W.api.saveChecklist('2.1', 'G10-S1', tick()), /does not need/);
   let b = W.call('saveChecklist', ['6.3', 'g10-s1', tick()]);
-  assert.deepStrictEqual(tr(b, 'asha@fsksurat.in').lists.map(x => x.code), ['G10-S1']);
-  throwsMsg(() => W.api.saveChecklist('6.3', 'G10-S1', tick()), /already completed/);
+  assert.deepStrictEqual(tr(b, 'asha@fsksurat.in').lists.map(x => x.code), ['g10-s1'], 'the code is kept exactly as the trainee typed it');
+  throwsMsg(() => W.api.saveChecklist('6.3', 'G10-S1', tick()), /already completed/);   // the same code in other letters is the same student
   throwsMsg(() => W.api.saveMyTask('6.3', 'submit', 'notes', ''), /you have 1/);
-  W.call('saveChecklist', ['6.3', 'G11-S4', tick()]);
+  W.call('saveChecklist', ['6.3', 'Student 7', tick()]);      // any code will do
   b = W.call('saveMyTask', ['6.3', 'submit', 'notes with codes only', '']); assert.strictEqual(tr(b, 'asha@fsksurat.in').p['6.3'].status, 'submitted');
-  assert.ok(!JSON.stringify(W.sheets.Checklists.cells).match(/Meera/), 'no name is ever stored');
   W.as(ADMIN);
 });
 

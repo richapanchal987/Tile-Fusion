@@ -85,7 +85,7 @@ A person can hold any combination: the Staff table has a role (Mentor/TL or Admi
 
 - **Deadlines.** The module says timelines are agreed with the mentor and TL. On each task a mentor/TL sets a **due date** for that trainee. It shows on the task card, the Deadlines card and the Reviews queue (late and due-soon are marked). It is a reminder and does not change a score.
 - **AI tools.** Each task has a default: *Ask first* (the module's rule), *Not allowed* (the Viva) or *Allowed*. A mentor/TL can set it per trainee per task. The rule that **student information is never entered into an AI tool** is shown on every task and in the Guide.
-- **Consent checklist.** Before tasks with a real student (6.3 two students, 6.4, 6.5, 7.2, 7.3, 7.5 two students) the trainee completes the module's *Pre-task safeguarding and consent checklist* in the app, once per student, using a **student code such as G10-S1**. Names are refused. The task cannot be submitted until it is done. Admins can switch this on for any other task.
+- **Consent checklist.** Before tasks with a real student (6.3 two students, 6.4, 6.5, 7.2, 7.3, 7.5 two students) the trainee completes the module's *Pre-task safeguarding and consent checklist* in the app, once per student, using a **student code of their own choosing** (no particular format is required; the app asks for a code and says never a name). The task cannot be submitted until it is done. Admins can switch this on for any other task.
 
 ## Module text from the Google Doc
 

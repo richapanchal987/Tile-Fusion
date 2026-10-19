@@ -33,13 +33,13 @@ function saveMyTask(taskId, action, evidence, reflection) {
   });
 }
 
-/** One checklist per real student, before the task begins. The student is only ever a code such as G10-S1. */
+/** One checklist per real student, before the task begins. The student is only ever a code the trainee chooses; no particular format is required. */
 function saveChecklist(taskId, studentCode, ticked) {
   return withLock_(() => {
     const ctx = traineeContext_('complete a consent checklist');
     const task = taskOf_(ctx.db, taskId);
     const code = validateChecklist_(task.id, studentCode, ticked, task);
-    if (ctx.db.checklists.some(c => c.trainee === ctx.me.email && c.task === task.id && c.code === code)) {
+    if (ctx.db.checklists.some(c => c.trainee === ctx.me.email && c.task === task.id && c.code.toLowerCase() === code.toLowerCase())) {
       throw new Error('You already completed the checklist for ' + code + ' on this task.');
     }
     sheet_('Checklists').appendRow([ctx.me.email, task.id, code, todayIso_()]);

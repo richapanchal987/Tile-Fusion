@@ -15,7 +15,7 @@ const DONE_STATES = ['complete', 'exempt', 'submitted'];          // counts as "
 const EDITABLE_STATES = ['not', 'progress', 'partial', 'rework']; // trainee may still change these
 const LEVELS = ['notcertified', 'certified'];
 const AI_KEYS = ['ask', 'no', 'yes'];
-const STUDENT_CODE = /^G\d{1,2}-S\d{1,3}$/;
+const MAX_STUDENT_CODE = 40;     // a safety limit for the Sheet, not a format: the code itself is whatever the trainee chooses
 
 const norm_ = e => String(e || '').trim().toLowerCase();
 const num_ = (v, d) => { const n = Number(v); return isFinite(n) && String(v).trim() !== '' ? n : (d === undefined ? 0 : d); };
@@ -371,8 +371,9 @@ function validateDue_(v) {
 
 function validateChecklist_(taskId, code, ticked, task) {
   if (!task.real) throw new Error('This task does not need a consent checklist.');
-  const c = String(code || '').trim().toUpperCase();
-  if (!STUDENT_CODE.test(c)) throw new Error('Use a student code such as ' + PROGRAMME.checklist.codeExample + ' (grade, then student number). Never a name.');
+  const c = String(code || '').trim();
+  if (!c) throw new Error('Enter the student code you are using for this student (a code, never their name).');
+  if (c.length > MAX_STUDENT_CODE) throw new Error('Keep the student code short (up to ' + MAX_STUDENT_CODE + ' characters).');
   const total = PROGRAMME.checklist.groups.reduce((a, g) => a + g[1].length, 0);
   if (!Array.isArray(ticked) || ticked.length !== total || !ticked.every(x => x === true)) throw new Error('Tick every item before saving the checklist.');
   return c;

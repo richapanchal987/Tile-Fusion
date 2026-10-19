@@ -90,9 +90,10 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     const c = await openCard(p, 'Understanding the Student');
     assert.ok((await c.innerText()).includes('0 of 2 students done'));
     assert.ok(await c.locator('[data-act=submit]').isDisabled(), 'submit is blocked');
-    await c.locator('[data-cl=code]').fill('Meera Shah');
+    assert.ok(!/G10|for example/i.test(await c.locator('.checkform').innerText()), 'no format or example is suggested for the student code');
+    assert.strictEqual(await c.locator('[data-cl=code]').getAttribute('placeholder'), 'The code you use for this student');
     await c.locator('[data-cl=item]').evaluateAll(xs => xs.forEach(x => x.click()));
-    await c.locator('[data-act=checklist]').click(); await toast(p, 'student code', true);
+    await c.locator('[data-act=checklist]').click(); await toast(p, 'Enter the student code', true);
     await card(p, 'Understanding the Student').locator('[data-cl=code]').fill('G10-S1');
     await card(p, 'Understanding the Student').locator('[data-act=checklist]').click(); await toast(p, 'every item', true);
     const c2 = card(p, 'Understanding the Student');
@@ -100,14 +101,13 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     await c2.locator('[data-act=checklist]').click(); await toast(p, 'Checklist saved');
     assert.ok((await card(p, 'Understanding the Student').innerText()).includes('1 of 2 students done'));
     const c3 = card(p, 'Understanding the Student');
-    await c3.locator('[data-cl=code]').fill('G11-S4'); await c3.locator('[data-cl=item]').evaluateAll(xs => xs.forEach(x => x.click()));
+    await c3.locator('[data-cl=code]').fill('Student 7'); await c3.locator('[data-cl=item]').evaluateAll(xs => xs.forEach(x => x.click()));
     await c3.locator('[data-act=checklist]').click(); await toast(p, 'Checklist saved');
     const c4 = card(p, 'Understanding the Student');
     assert.ok(await c4.locator('[data-act=submit]').isEnabled());
     await p.screenshot({ path: path.join(shots, '2-checklist.png'), fullPage: true });
-    await c4.locator('[data-f=evidence]').fill('Notes for G10-S1 and G11-S4 in the restricted folder');
+    await c4.locator('[data-f=evidence]').fill('Notes for g10-s1 and Student 7 in the restricted folder');
     await c4.locator('[data-act=submit]').click(); await toast(p, 'Submitted for review');
-    assert.ok(!(await p.innerText('body')).includes('Meera Shah'), 'no name is shown anywhere');
     assert.deepStrictEqual(p.errors, []); await p.context().close();
   });
 

@@ -22,7 +22,7 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `Config.gs` | Script (.gs) | `Config` | 17 | 6 KB | `};` |
 | `DocSync.gs` | Script (.gs) | `DocSync` | 251 | 12 KB | `}` |
 | `Index.html` | HTML | `Index` | 25 | 1 KB | `</html>` |
-| `Logic.gs` | Script (.gs) | `Logic` | 400 | 20 KB | `}` |
+| `Logic.gs` | Script (.gs) | `Logic` | 401 | 20 KB | `}` |
 | `SeedData.gs` | Script (.gs) | `SeedData` | 57 | 20 KB | `};` |
 | `SeedRubrics.gs` | Script (.gs) | `SeedRubrics` | 20 | 6 KB | `const SEED_RUBRIC_PARTS = () => [SEED_RUBRICS_1, SEED_RUBRICS_2, SEED_` |
 | `SeedRubrics1.gs` | Script (.gs) | `SeedRubrics1` | 126 | 19 KB | `];` |

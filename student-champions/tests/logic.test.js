@@ -187,11 +187,13 @@ t('who may certify: only a Certifying Mentor; admin or certifier may withdraw', 
   assert.throws(() => L.validateCertification_('supervised', ok, { role: 'Admin', certifier: true }), /Unknown/);
 });
 
-t('consent checklist: needs a student code (never a name) and every item ticked', () => {
+t('consent checklist: needs a student code of any form (no format is prescribed) and every item ticked', () => {
   const total = PR.checklist.groups.reduce((a, g) => a + g[1].length, 0), all = Array(total).fill(true), task = { real: true };
   assert.strictEqual(total, 14);
-  assert.strictEqual(L.validateChecklist_('6.3', 'g10-s1', all, task), 'G10-S1');
-  ['Asha Mehta', 'G10', 'AM', 'G10-S', 'S1'].forEach(c => assert.throws(() => L.validateChecklist_('6.3', c, all, task), /student code/));
+  ['g10-s1', 'G10-S1', '7', 'Blue fox 3', 'A/12-b', '  spaced  '].forEach(c => assert.strictEqual(L.validateChecklist_('6.3', c, all, task), c.trim()), 'any code the trainee chooses is accepted as typed');
+  ['', '   ', null].forEach(c => assert.throws(() => L.validateChecklist_('6.3', c, all, task), /Enter the student code/));
+  assert.throws(() => L.validateChecklist_('6.3', 'x'.repeat(41), all, task), /short/);
+  assert.ok(!/G10|for example|digit|number|character/i.test(JSON.stringify(PR.checklist)), 'the checklist text does not prescribe a format');
   assert.throws(() => L.validateChecklist_('6.3', 'G10-S1', all.slice(0, 13), task), /every item/);
   assert.throws(() => L.validateChecklist_('6.3', 'G10-S1', all.map((x, i) => i !== 3), task), /every item/);
   assert.throws(() => L.validateChecklist_('2.1', 'G10-S1', all, { real: false }), /does not need/);
