@@ -17,6 +17,7 @@ document.addEventListener('click',e=>{
     case'export-tracker':exportTracker(T(UI.tid));break;
     case'export-team':exportTeam();break;
     case'doc':toggleDoc(ds.title);break;
+    case'cert-more':UI.certAll=!UI.certAll;render();break;
     case'sync':run('refreshModuleText',[],'Module text refreshed from the doc','Reading the doc. This can take a minute.');break;
     case'save':case'submit':{
       const id=form.dataset.t,ev=$('[data-f=evidence]',form).value,rf=$('[data-f=reflection]',form).value;

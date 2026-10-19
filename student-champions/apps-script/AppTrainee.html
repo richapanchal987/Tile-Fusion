@@ -22,8 +22,9 @@ function certCard(tr){
   else if(s.eligible==='certified')lines.push(`Everything needed is in place. Waiting for ${esc(who)} to confirm.`);
   else{
     lines.push(`Still needed before ${esc(WD.certifier)} can certify:`);
-    s.blockers.slice(0,4).forEach(b=>lines.push('&bull; '+esc(b)));
-    if(s.blockers.length>4)lines.push(`&hellip; and ${s.blockers.length-4} more.`);
+    const all=UI.certAll||s.blockers.length<=5;
+    (all?s.blockers:s.blockers.slice(0,4)).forEach(b=>lines.push('&bull; '+esc(b)));
+    if(s.blockers.length>5)lines.push(`<button class="linkbtn" data-act="cert-more" aria-expanded="${!!UI.certAll}">${UI.certAll?'Show fewer':`&hellip; and ${s.blockers.length-4} more. Show all`}</button>`);
   }
   let ctl='';
   if(staff){

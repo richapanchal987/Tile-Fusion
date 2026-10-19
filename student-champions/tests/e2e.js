@@ -43,6 +43,12 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     const aside = await p.locator('aside').innerText();
     assert.ok(aside.includes('Module pass marks') && aside.includes('3 of 8 met') && aside.includes('Critical gates: 5 of 15') && aside.includes('Deadlines'));
     assert.strictEqual(await p.locator('.mods li').count(), 8);
+    const more = p.locator('.ready [data-act=cert-more]');
+    assert.ok((await more.innerText()).includes('more'), 'the remaining items can be opened');
+    const before = await p.locator('.ready p').count(); await more.click();
+    assert.ok((await p.locator('.ready p').count()) > before, 'all the items are listed');
+    assert.ok((await p.locator('.ready').innerText()).includes('Module 8 is at'), 'including the last one');
+    await p.locator('.ready [data-act=cert-more]').click(); assert.strictEqual(await p.locator('.ready p').count(), before, 'and it can be closed again');
     assert.strictEqual(await p.locator('.tab').count(), 2, 'a trainee sees only My training and Guide');
     assert.strictEqual(await p.locator('.assessform, .planbox').count(), 0, 'no assessor controls for a trainee');
     await p.screenshot({ path: path.join(shots, '1-trainee-home.png'), fullPage: true });

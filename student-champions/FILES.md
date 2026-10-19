@@ -13,10 +13,10 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `AppAdmin.html` | HTML | `AppAdmin` | 100 | 19 KB | `</script>` |
 | `AppAssess.html` | HTML | `AppAssess` | 78 | 8 KB | `</script>` |
 | `AppCore.html` | HTML | `AppCore` | 127 | 11 KB | `</script>` |
-| `AppEvents.html` | HTML | `AppEvents` | 113 | 9 KB | `</script>` |
+| `AppEvents.html` | HTML | `AppEvents` | 114 | 9 KB | `</script>` |
 | `AppFiles.html` | HTML | `AppFiles` | 87 | 7 KB | `</script>` |
 | `AppTeam.html` | HTML | `AppTeam` | 52 | 8 KB | `</script>` |
-| `AppTrainee.html` | HTML | `AppTrainee` | 196 | 21 KB | `</script>` |
+| `AppTrainee.html` | HTML | `AppTrainee` | 197 | 21 KB | `</script>` |
 | `Art.html` | HTML | `Art` | 75 | 7 KB | `</script>` |
 | `Code.gs` | Script (.gs) | `Code` | 322 | 17 KB | `}` |
 | `Config.gs` | Script (.gs) | `Config` | 17 | 6 KB | `};` |
