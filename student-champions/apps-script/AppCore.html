@@ -64,7 +64,7 @@ function render(){
   if(D.me.role==='None'){app.innerHTML=`<div class="center">${emptyArt('lock')}<h1>You're not enrolled yet</h1><p class="muted">You're signed in as ${esc(D.me.email||'an unknown account')}. Ask your Team Leader or an admin to enrol you, then reload this page.</p></div>`;return}
   const staff=isStaff(),pend=staff?pendingTotal():0;
   const tabs=staff?[['review','Reviews'],['trainee',WD.Trainee],['team','Team']].concat(isAdmin()?[['curriculum','Curriculum']]:[]).concat([['guide','Guide']]):[['trainee','My training'],['guide','Guide']];
-  const v=UI.view;
+  const v=UI.view,fe=document.activeElement,focus=fe&&fe.id&&app.contains(fe)?{id:fe.id,a:fe.selectionStart,b:fe.selectionEnd}:null;   // keep the cursor where it was
   const act=D.trainees.filter(t=>t.active);
   app.innerHTML=`${MEDAL_DEFS}
   <header class="top"><div class="top-in">
@@ -74,14 +74,15 @@ function render(){
   </div></header>
   ${v==='trainee'&&staff&&act.length?`<div class="proto"><label>${WD.Trainee} <select data-act="pick" aria-label="Choose ${WD.trainee}">${act.map(t=>`<option value="${esc(t.id)}" ${t.id===UI.tid?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label><span>You're viewing their training. Only they can submit work; you can record assessments.</span></div>`:''}
   <main>${v==='trainee'?vTrainee():v==='review'?vReview():v==='team'?vTeam():v==='curriculum'?vCurriculum():vGuide()}</main>`;
-  mountViewers();
+  mountViewers();loadOpenWork();
+  if(focus){const el=document.getElementById(focus.id);if(el){el.focus({preventScroll:true});try{if(focus.a!=null)el.setSelectionRange(focus.a,focus.b)}catch(e){}}}
   if(!UI.introDone){UI.introDone=true;document.body.classList.add('intro');countUp();setTimeout(()=>document.body.classList.remove('intro'),1700)}
 }
 
 /* ---------- milestones, since you last visited, and celebrations ---------- */
 function milestones(tr){
   const s=tr.stats,act=D.tasks.filter(t=>t.active),isDone=t=>['complete','exempt'].includes(P(tr,t.id).status),icons=['book','target','eye','flag'];
-  const L=[{id:'first',icon:'check',title:'First task done',on:act.some(isDone)},{id:'gate',icon:'shield',title:'First gate passed',on:s.gatesPassed>=1}];
+  const L=[{id:'first',icon:'check',title:'First task done',on:act.some(isDone)}].concat(isStaff()?[{id:'gate',icon:'shield',title:'First gate passed',on:s.gatesPassed>=1}]:[]);
   D.config.phaseNames.slice(0,-1).forEach((name,i)=>{const ts=act.filter(t=>t.phase===name);L.push({id:'ph'+i,icon:icons[i%4],title:phaseShortName(name)+' complete',on:ts.length>0&&ts.every(isDone)})});
   L.push({id:'half',icon:'spark',title:'Halfway there',on:s.completion>=50},{id:'marks',icon:'target',title:'All module pass marks met',on:s.modulesMet===s.modules.length&&s.modules.length>0},{id:'cert',icon:'star',title:LEVEL.certified,on:s.effective==='certified'});
   return L;

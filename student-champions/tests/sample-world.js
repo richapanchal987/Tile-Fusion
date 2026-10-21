@@ -8,6 +8,9 @@ const read = f => fs.readFileSync(path.join(dir, f), 'utf8');
 const HTML = read('Index.html').replace(/<\?!= include_\('(\w+)'\) \?>/g, (_, n) => read(n + '.html')).replace('<?= appName ?>', 'Student Champion Training').replace(/<link[^>]*fonts\.[^>]*>/g, '');
 const ADMIN = 'richa.panchal@fsksurat.in', W = makeWorld(); W.as(ADMIN); W.api.setup();
 const P = W.api.PROGRAMME;
+// Module text from the (sample of the) real doc. FULL_DOC=path uses a full copy instead (for screenshots).
+const blocks = JSON.parse(fs.readFileSync(process.env.FULL_DOC || path.join(__dirname, 'fixtures', 'doc-sample.json'), 'utf8'));
+W.state.doc = { blocks: blocks }; W.call('refreshModuleText', []);
 
 W.call('saveStaff', ['tl@fsksurat.in', 'Priya Nair', 'Assessor']);
 W.call('saveStaff', ['mentor@fsksurat.in', 'Rohan Desai', 'Assessor']);
@@ -22,6 +25,13 @@ const tasks = W.call('getBootstrap').tasks, rubrics = W.call('getBootstrap').rub
 const crit = (id, s) => { const o = {}; rubrics.filter(r => r.task === id && r.use === 'score').forEach((r, i) => { o[r.order] = Array.isArray(s) ? s[i % s.length] : s; }); return o; };
 const assess = (e, id, s, fb) => W.call('assessTask', [e, id, { criteria: crit(id, s), feedback: fb || 'Clear, honest and well reasoned.' }]);
 const tick = () => Array(14).fill(true);
+// What a trainee types: every reflection question answered (required) and, optionally, the first few answer boxes
+const work = (id, n, text) => { const w = W.call('getTaskWork', [me(), id]); const a = {}, r = {};
+  w.answers.slice(0, n || 0).forEach((q, i) => { a[q.key] = (text || 'My answer') + ' ' + (i + 1) + '.'; });
+  w.reflection.forEach(q => { r[q.key] = 'I learned to listen first and to check what the student needs before acting.'; });
+  W.call('autosaveTask', [id, { a: a, r: r }]); };
+let ME = ''; const as = e => { ME = e; W.as(e); }; const me = () => ME;
+const submit = (id, ev, n) => { work(id, n); W.call('saveMyTask', [id, 'submit', ev]); };
 
 // Asha: mid-way through Module 4; one task needing a reattempt, a critical-gate struggle and deadlines set
 tasks.filter(t => t.cycle <= 5).forEach(t => assess('asha@fsksurat.in', t.id, [3, 4, 3, 4]));
@@ -30,12 +40,15 @@ assess('asha@fsksurat.in', '1.5', [4, 3, 4]);
 W.call('setTaskPlan', ['asha@fsksurat.in', '4.3', daysAgo(2), '']);
 W.call('setTaskPlan', ['asha@fsksurat.in', '4.4', inDays(2), 'no']);
 W.call('setTaskPlan', ['asha@fsksurat.in', '5.1', inDays(9), 'yes']);
-W.as('asha@fsksurat.in'); ['4.3', '5.1'].forEach(id => W.call('saveMyTask', [id, 'submit', 'https://drive.example/' + id, 'Notes on what I learned.']));
-W.call('saveMyTask', ['4.4', 'save', 'Notes in progress', '']);
+as('asha@fsksurat.in'); ['4.3', '5.1'].forEach(id => submit(id, 'https://drive.example/' + id, 2));
+W.call('autosaveTask', ['4.4', { evidence: 'Notes in progress' }]);
 // Bina: early on, one submission
 W.as(ADMIN);
-tasks.filter(t => t.cycle <= 2).forEach(t => assess('bina@fsksurat.in', t.id, [3, 3, 4]));
-W.as('bina@fsksurat.in'); W.call('saveMyTask', ['2.5', 'submit', 'Programme guide notes in the team folder', '']);
+tasks.filter(t => t.cycle <= 2 && t.id !== '1.2').forEach(t => assess('bina@fsksurat.in', t.id, [3, 3, 4]));
+as('bina@fsksurat.in'); submit('2.5', 'Programme guide notes in the team folder');
+work('1.2', 4, 'Scenario answer');
+W.as('tl@fsksurat.in'); W.call('addComment', ['bina@fsksurat.in', '1.2', 'Good start on scenario 1. Say who you would involve and when.']);
+W.call('setTaskPlan', ['bina@fsksurat.in', '5.2', inDays(20), '', 'Topic agreed: ' + inDays(6) + '\nSession plan to TL: ' + inDays(13) + '\nDummy session: ' + inDays(20)]);
 // Chitra: far along, with a critical error to reattempt and everything else strong
 W.as(ADMIN);
 tasks.filter(t => t.cycle <= 10).forEach(t => assess('chitra@fsksurat.in', t.id, 4));
@@ -44,11 +57,8 @@ W.call('saveChecklist', ['6.3', 'G11-S2', tick()]);
 W.as(ADMIN);
 W.call('assessTask', ['chitra@fsksurat.in', '7.3', { criteria: crit('7.3', 4), feedback: 'Told a parent "I think she has anxiety". Remediation with the TL booked, then reattempt.', critical: { type: P.criticalErrors[3][0] } }]);
 // Devi: just started, one draft
-W.as('devi@fsksurat.in'); W.call('saveMyTask', ['1.1', 'save', 'First notes', '']);
+as('devi@fsksurat.in'); W.call('autosaveTask', ['1.1', { evidence: 'First notes' }]);
 W.as(ADMIN);
-// Module text from the (sample of the) real doc
-const blocks = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'doc-sample.json'), 'utf8'));
-W.state.doc = { blocks: blocks }; W.call('refreshModuleText', []);
 
 async function open(browser, email, scheme, vp) {
   W.as(email);

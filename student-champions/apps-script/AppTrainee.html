@@ -94,10 +94,10 @@ function vTrainee(){
       ${tasks.map(t=>taskCard(tr,t,mine)).join('')||'<div class="empty">No tasks in this '+WD.cycle+'.</div>'}</section>
     <aside>
       ${passMarksCard(tr)}
-      <div class="card"><div class="stats">${stat(s.competency,'/100','star','Competency')}${stat(s.gatesPassed,'/'+s.gatesTotal,'shield','Gates passed')}</div><p class="hint">Competency is the weighted average score of assessed tasks. A high percentage cannot make up for a critical gate that is not passed.</p></div>
+      <div class="card"><div class="stats">${stat(s.competency,'/100','star','Competency')}${isStaff()?stat(s.gatesPassed,'/'+s.gatesTotal,'shield','Gates passed'):''}</div><p class="hint">Competency is the weighted average score of assessed tasks.${isStaff()?' A high percentage cannot make up for a critical gate that is not passed.':''}</p></div>
       ${dueCard(tr)}
-      ${nu.length?`<div class="card"><h3>${ico('target')} Next up</h3><ul class="nextup">${nu.map(t=>`<li><button data-act="goto" data-c="${t.cycle}" data-t="${esc(t.id)}" style="${pcv(t.cycle)}">${ico(TYPE_ICON[t.type]||'target',18)}<b>${esc(t.id)} ${esc(t.name)}</b><small>${WD.Cycle} ${t.cycle}${t.gate?', critical gate':''}</small></button></li>`).join('')}</ul></div>`:''}
-      <div class="card"><details ${openSet.has('gates')?'open':''} data-key="gates"><summary>Critical gates: ${s.gatesPassed} of ${s.gatesTotal}</summary><ul class="gl">${s.gates.map(g=>`<li class="${g.state}"><span class="ic2" aria-hidden="true"></span><span>${esc(g.id)} ${esc(g.name)}<small>${g.state==='pass'?'Passed':g.state==='attention'?'Needs another attempt':WD.Cycle+' '+g.cycle}</small></span></li>`).join('')}</ul></details></div>
+      ${nu.length?`<div class="card"><h3>${ico('target')} Next up</h3><ul class="nextup">${nu.map(t=>`<li><button data-act="goto" data-c="${t.cycle}" data-t="${esc(t.id)}" style="${pcv(t.cycle)}">${ico(TYPE_ICON[t.type]||'target',18)}<b>${esc(t.id)} ${esc(t.name)}</b><small>${WD.Cycle} ${t.cycle}${t.gate&&isStaff()?', critical gate':''}</small></button></li>`).join('')}</ul></div>`:''}
+      ${isStaff()?`<div class="card"><details ${openSet.has('gates')?'open':''} data-key="gates"><summary>Critical gates: ${s.gatesPassed} of ${s.gatesTotal}</summary><ul class="gl">${s.gates.map(g=>`<li class="${g.state}"><span class="ic2" aria-hidden="true"></span><span>${esc(g.id)} ${esc(g.name)}<small>${g.state==='pass'?'Passed':g.state==='attention'?'Needs another attempt':WD.Cycle+' '+g.cycle}</small></span></li>`).join('')}</ul></details></div>`:''}
     </aside>
   </div>`;
 }
@@ -117,10 +117,8 @@ function evidenceView(tr,t,p){
 /* ---------- rubric, consent checklist, task plan ---------- */
 const levelHelp=n=>`<li><b>${n} ${esc(SCALE[n])}</b> ${esc(D.config.scaleHelp[n])}</li>`;
 function rubricView(t){
-  const rows=D.rubrics.filter(r=>r.task===t.id),staff=isStaff();
-  // The competency standard is for mentors, TLs and admins. A trainee sees rubric rows only where the rubric is shown to them.
-  const noScored=!rows.some(r=>r.use==='score'),note=noScored&&!staff?'<p class="hint">Your mentor or TL scores this task against the competency standard for the role.</p>':'';
-  if(!rows.length)return staff?`<p>${esc(t.standard)}</p>`:note;
+  const rows=D.rubrics.filter(r=>r.task===t.id),note='';   // staff only: a trainee never receives the rubric
+  if(!rows.length)return'<p class="hint">No rubric for this task; it is scored against the competency standard.</p>';
   const groups=[],by={};
   rows.forEach(r=>{const k=r.use+'|'+r.group;if(!by[k]){by[k]={use:r.use,group:r.group,rows:[]};groups.push(by[k])}by[k].rows.push(r)});
   const crit=r=>`<div class="crit"><b>${esc(r.criterion)}</b>${r.evaluated?`<p class="hint">${esc(r.evaluated)}</p>`:''}${r.levels.some(Boolean)?`<ul class="lvl">${r.levels.map((x,i)=>`<li><b>${i+1}</b> ${esc(x||'')}</li>`).join('')}</ul>`:''}</div>`;
@@ -132,14 +130,28 @@ function rubricView(t){
   return`${note}<details class="rubric" data-key="${esc(k)}" ${openSet.has(k)?'open':''}><summary>${n?`${n} criteri${n===1?'on':'a'}, scored 1 to 4`:'Reference only'}</summary><ul class="lvl generic">${[4,3,2,1].map(levelHelp).join('')}</ul>${body}<p class="hint">The task score is the average of the criterion scores, rounded up at .5.${t.gate?` A critical gate needs ${D.config.passScore} or more.`:''}</p></details>`;
 }
 
+const CLS={};   // a checklist being filled in, kept while the page redraws
 function checklistBox(tr,t,mine,editable){
   if(!t.real)return'';
-  const need=Math.max(1,t.students),done=tr.lists.filter(c=>c.task===t.id),ck=D.config.checklist;
-  const form=mine&&editable?`<div class="myform checkform" data-t="${esc(t.id)}"><p class="hint">${esc(ck.intro)}</p>
-    <div class="field"><label for="cl-${slug(t.id)}">Student code</label><input type="text" id="cl-${slug(t.id)}" data-cl="code" placeholder="The code you use for this student" autocomplete="off"></div>
-    ${ck.groups.map((g,gi)=>`<fieldset class="clgroup"><legend>${esc(g[0])}</legend>${g[1].map((x,xi)=>`<label class="clitem"><input type="checkbox" data-cl="item"> <span>${esc(x)}</span></label>`).join('')}</fieldset>`).join('')}
-    <div class="row"><button class="btn small" data-act="checklist">Save checklist for this student</button></div></div>`:'';
+  const need=Math.max(1,t.students),done=tr.lists.filter(c=>c.task===t.id),ck=D.config.checklist,sl=slug(t.id);
+  const st=CLS[t.id]=CLS[t.id]||{code:'',items:[]},total=ck.groups.reduce((n,g)=>n+g[1].length,0);let i=0;
+  const form=mine&&editable&&done.length<need?`<div class="myform checkform" data-t="${esc(t.id)}"><p class="hint">${esc(ck.intro)}</p>
+    <div class="field"><label for="cl-${sl}">Student code</label><input type="text" id="cl-${sl}" data-cl="code" value="${esc(st.code)}" placeholder="The code you use for this student" autocomplete="off"></div>
+    ${ck.groups.map(g=>`<fieldset class="clgroup"><legend>${esc(g[0])}</legend>${g[1].map(x=>{const n=i++;return`<label class="clitem"><input type="checkbox" data-cl="item" data-i="${n}" ${st.items[n]?'checked':''}> <span>${esc(x)}</span></label>`}).join('')}</fieldset>`).join('')}
+    <p class="clstate" data-clstate role="status">${clText(st,total)}</p></div>`:'';
   return`<div class="kv"><h4>${esc(ck.title)}</h4><p class="${done.length>=need?'':'warnline'}">${done.length} of ${need} student${need===1?'':'s'} done${done.length?': '+done.map(c=>`<span class="code">${esc(c.code)}</span>`).join(' '):''}. ${done.length>=need?'You can submit this task.':'Complete this before the task begins; it is needed before you can submit.'}</p>${form}</div>`;
+}
+function clText(st,total){
+  const n=st.items.filter(Boolean).length,code=st.code.trim();
+  if(n===total&&code)return'All ticked and the code entered.';
+  return`${n} of ${total} items ticked${code?'':', no student code yet'}. Every item is required. It saves by itself once the code is entered and all ${total} are ticked.`;
+}
+/** Called as the trainee ticks or types: saves the checklist as soon as it is complete. */
+function checklistChanged(f){
+  const tid=f.dataset.t,st=CLS[tid],items=Array.from(f.querySelectorAll('[data-cl=item]'));
+  st.code=$('[data-cl=code]',f).value;st.items=items.map(x=>x.checked);
+  const el=$('[data-clstate]',f);if(el)el.textContent=clText(st,items.length);
+  if(st.code.trim()&&st.items.every(Boolean)&&!busy){openSet.add(UI.tid+'|'+tid);run('saveChecklist',[tid,st.code,st.items],'Checklist saved for '+st.code.trim(),null,()=>{delete CLS[tid]})}
 }
 
 function planBox(tr,t,p){
@@ -147,7 +159,8 @@ function planBox(tr,t,p){
   return`<div class="planbox" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}"><h4>Agree the plan for this task</h4>
     <div class="formgrid"><div class="field"><label for="pd-${sl}">Due date</label><input type="date" id="pd-${sl}" data-plan="due" value="${esc(p.due||'')}"></div>
     <div class="field"><label for="pa-${sl}">AI tools</label><select id="pa-${sl}" data-plan="ai"><option value="" ${k===''?'selected':''}>Task default: ${esc(D.config.aiOptions[t.ai||'ask'][0])}</option>${Object.keys(D.config.aiOptions).map(a=>`<option value="${a}" ${k===a?'selected':''}>${esc(D.config.aiOptions[a][0])}</option>`).join('')}</select></div></div>
-    <div class="row"><button class="btn small" data-act="plan">Save plan</button><span class="hint">${esc(WD.trainee)} sees the date and the AI setting on the task.</span></div></div>`;
+    ${t.timeline?`<div class="field"><label for="pt-${sl}">Timeline for ${esc(tr.name)}</label><textarea id="pt-${sl}" data-plan="timeline" rows="4" placeholder="For example: Topic agreed 3 Nov. Session plan 10 Nov. Dummy session 14 Nov.">${esc(p.timeline||'')}</textarea></div>`:''}
+    <div class="row"><button class="btn small" data-act="plan">Save plan</button><span class="hint">${esc(WD.trainee)} sees the date, the AI setting${t.timeline?' and the timeline':''} on the task.</span></div></div>`;
 }
 
 /* ---------- the task card ---------- */
@@ -163,35 +176,37 @@ function taskCard(tr,t,mine){
   else if(p.status==='partial'||p.status==='rework')block+=`<div class="note ${p.status==='rework'?'red':'amber'}"><b>${STATUS[p.status]}${p.score?', '+p.score+' of 4, '+esc(SCALE[p.score]):''}.</b> ${fb}</div>`;
   if((p.status==='partial'||p.status==='rework')&&mine)block+=`<p class="${left>0?'hint':'warnline'}">${left>0?`You can reattempt this task ${left===1?'once':left+' times'} more.`:'You have used the reattempts allowed. Talk to your TL or mentor; an admin can allow another.'}</p>`;
   if(p.status==='submitted')block+=`<div class="note"><b>Submitted${p.submitted?' '+fmtDate(p.submitted):''}. Waiting for review.</b></div>`;
+  const ss=`<span class="savestate" data-ss="${esc(t.id)}" role="status">${esc(ssText(t.id))}</span>`;
   if(mine&&editable){
-    const ev=dv(tr.id,t.id,'evidence',p.evidence||''),rf=dv(tr.id,t.id,'reflection',p.reflection||''),blocked=!listsOk||left<=0;
+    const blocked=!listsOk||left<=0;
     block+=`<div class="myform" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}" style="display:grid;gap:12px">
-      <div class="field"><label for="ev-${sl}">Link or reference to your evidence</label><input type="text" id="ev-${sl}" data-f="evidence" value="${esc(ev)}" placeholder="A restricted Drive link, or a Nucleus reference"></div>
+      ${t.evidence?`<div class="field"><label for="ev-${sl}">${esc(D.config.evidenceLink)}</label><input type="text" id="ev-${sl}" data-w="e" data-t="${esc(t.id)}" value="${esc(p.evidence||'')}" placeholder="A restricted Drive link, or a Nucleus reference"></div>
       ${filesHtml(tr,t,p,true)}
-      <div class="filepick"><input type="file" id="up-${sl}" data-up="${esc(t.id)}"><label class="btn ghost small" for="up-${sl}">Attach a file</label> <span class="hint">PDF, Word (.docx), image, text, mp3, m4a or mp4 can be viewed directly in the app; other Office files can only be downloaded, so a PDF is best. Up to ${D.config.maxUploadMb} MB each, ${D.config.maxFiles} files. For anything larger, paste a link.</span></div>
-      <div class="field"><label for="rf-${sl}">Reflection (optional)</label><textarea id="rf-${sl}" data-f="reflection" placeholder="What went well, what you would do differently, what you are unsure about">${esc(rf)}</textarea><span class="hint">Never write a student's name or details that identify them. Use the student code.</span></div>
-      <div class="row"><button class="btn ghost" data-act="save">Save draft</button><button class="btn" data-act="submit" ${blocked?'disabled':''}>Submit for review</button>${!listsOk?'<span class="hint">Complete the consent checklist above first.</span>':left<=0?'<span class="hint">No reattempts left.</span>':''}</div></div>`;
-  }else if(p.status!=='not'||p.evidence||(p.files||[]).length){
-    block+=`<div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>${p.reflection?`<div class="kv"><h4>${esc(WD.Trainee)}'s reflection</h4><p>${esc(p.reflection)}</p></div>`:''}`;
+      <div class="filepick"><input type="file" id="up-${sl}" data-up="${esc(t.id)}"><label class="btn ghost small" for="up-${sl}">Attach a file</label> <span class="hint">PDF, Word (.docx), image, text, mp3, m4a or mp4 can be viewed directly in the app; other Office files can only be downloaded, so a PDF is best. Up to ${D.config.maxUploadMb} MB each, ${D.config.maxFiles} files. For anything larger, paste a link.</span></div>`:''}
+      <div class="row"><button class="btn" data-act="submit" ${blocked?'disabled':''}>Submit for review</button>${!listsOk?'<span class="hint">Complete the consent checklist above first.</span>':left<=0?'<span class="hint">No reattempts left.</span>':ss}</div></div>`;
+  }else if(p.evidence||(p.files||[]).length){
+    block+=`<div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>`;
   }
+  if(p.reflection)block+=`<div class="kv"><h4>Earlier reflection</h4><p>${esc(p.reflection)}</p></div>`;
   if(staff&&(p.status==='partial'||p.status==='rework')&&left<=0&&isAdmin())block+=`<div class="row"><button class="btn ghost small" data-act="grant" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}">Allow another reattempt</button></div>`;
   if(staff)block+=planBox(tr,t,p)+assessForm(tr,t,p);
-  const aiTip=D.config.aiOptions[ak][1];
-  return`<details class="task" data-key="${esc(key)}" style="${pcv(t.cycle)}" ${openSet.has(key)?'open':''}>
+  const aiTip=D.config.aiOptions[ak][1],open=openSet.has(key),edit=mine&&editable;
+  const tl=t.timeline?`<p class="timeline">${p.timeline?esc(p.timeline):`<span class="hint">${staff?'No timeline yet. Add it in the plan below.':'Your TL will add your timeline here.'}</span>`}</p>`:'';
+  return`<details class="task" data-key="${esc(key)}" style="${pcv(t.cycle)}" ${open?'open':''}>
     <summary><span class="tid">${esc(t.id)}</span><span class="tname">${esc(t.name)}</span>
-      <span class="pills">${t.gate?`<span class="pill gate">${ico('shield',13)}Critical gate</span>`:''}${ds?`<span class="pill due-${ds}">${ico('calendar',13)}${dueText(p)}</span>`:''}<span class="pill s-${p.status}">${STATUS_ICON[p.status]?ico(STATUS_ICON[p.status],13):''}${STATUS[p.status]}</span></span>
+      <span class="pills">${t.gate&&staff?`<span class="pill gate">${ico('shield',13)}Critical gate</span>`:''}${ds?`<span class="pill due-${ds}">${ico('calendar',13)}${dueText(p)}</span>`:''}<span class="pill s-${p.status}">${STATUS_ICON[p.status]?ico(STATUS_ICON[p.status],13):''}${STATUS[p.status]}</span></span>
       <span class="ttopic">${ico(TYPE_ICON[t.type]||'target',15)}${esc(topicOf(t.topic).name)}${t.type?', '+esc(t.type.toLowerCase()):''}</span></summary>
-    <div class="tbody">
-      <div class="kv"><h4>What you'll do</h4><p>${esc(t.what)}</p></div>
-      <div class="kv"><h4>Agreed with your mentor or TL</h4><p>${p.due?`<span class="chip ${ds==='overdue'?'bad':ds==='soon'?'warn':''}">${ico('calendar',13)} ${dueText(p)}</span> `:'<span class="hint">No due date set yet. </span>'}<span class="chip ai-${ak}" title="${esc(aiTip)}">AI: ${esc(D.config.aiOptions[ak][0])}</span> ${t.real?'<span class="chip warn">Real student: consent checklist first</span>':''}</p><p class="hint">${esc(aiTip)} ${esc(D.config.aiRule)}</p></div>
-      ${docBox(t.doc)}
-      <div class="kv"><h4>How you'll be assessed</h4>${rubricView(t)}${t.gate?`<p class="hint">Critical gate: needs Complete with a score of ${D.config.passScore} or more.</p>`:''}</div>
-      ${staff&&t.standard?`<div class="kv"><h4>Competency standard <span class="hint">(mentors, TLs and admins only)</span></h4><p>${esc(t.standard)}</p></div>`:''}
-      <div class="kv"><h4>Evidence to submit</h4><p>${esc(t.evidence)}</p></div>
+    ${open?`<div class="tbody" data-needwork data-tr="${esc(tr.id)}" data-t="${esc(t.id)}">
+      <div class="kv"><h4>What you'll do</h4><p>${esc(t.what)}</p>${staff&&t.traineeName?`<p class="hint">${esc(WD.Trainee)} sees this task as &ldquo;${esc(t.traineeName)}&rdquo;.</p>`:''}</div>
+      <div class="kv"><h4>Agreed with your mentor or TL</h4><p>${p.due?`<span class="chip ${ds==='overdue'?'bad':ds==='soon'?'warn':''}">${ico('calendar',13)} ${dueText(p)}</span> `:'<span class="hint">No due date set yet. </span>'}<span class="chip ai-${ak}" title="${esc(aiTip)}">AI: ${esc(D.config.aiOptions[ak][0])}</span> ${t.real?'<span class="chip warn">Real student: consent checklist first</span>':''}</p><p class="hint">${esc(aiTip)} ${esc(D.config.aiRule)}</p>${tl}</div>
+      ${t.evidence?`<div class="kv"><h4>Evidence to submit</h4><p>${esc(t.evidence)}</p></div>`:''}
       <div class="kv"><h4>Resources</h4><ul class="res">${res.map(r=>`<li>${isUrl(r.url)?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.label)}</a>`:`<span>${esc(r.label)}</span><span class="nolink">link not added yet</span>`}${r.note?`<span class="hint">${esc(r.note)}</span>`:''}</li>`).join('')||'<li class="nolink">No resources yet</li>'}</ul></div>
-      ${staff?`<p class="hint">Counts ${t.w}% toward training completion.</p>`:''}
       ${checklistBox(tr,t,mine,editable)}
+      ${taskText(tr.id,t,edit)}
+      ${reflectionBox(tr.id,t,edit)}
+      ${staff?`<div class="kv staffonly"><h4>How it is assessed <span class="hint">(mentors, TLs and admins only)</span></h4>${rubricView(t)}${t.gate?`<p class="hint">Critical gate: needs Complete with a score of ${D.config.passScore} or more.</p>`:''}${t.standard?`<h5>Competency standard</h5><p>${esc(t.standard)}</p>`:''}<p class="hint">Counts ${t.w}% toward training completion.</p></div>`:''}
+      ${commentsBox(tr,t)}
       ${block}
-    </div></details>`;
+    </div>`:''}</details>`;
 }
 </script>

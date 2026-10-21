@@ -27,7 +27,7 @@ async function open(browser, email, opts) {
   return page;
 }
 const card = (p, text) => p.locator('.task', { hasText: text });
-const openCard = async (p, text) => { await card(p, text).locator('summary').first().click(); return card(p, text); };
+const openCard = async (p, text) => { await card(p, text).locator('summary').first().click(); await card(p, text).locator('.tbody').waitFor(); return card(p, text); };
 const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.show:has-text("${text}")`);
 
 (async () => {
@@ -41,7 +41,8 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     const hero = await p.locator('.hero2').innerText();
     assert.ok(/Ends \d+ \w+ \d{4}/.test(hero) && /Mentor: Rohan Desai/.test(hero) && /TL: Priya Nair/.test(hero) && /Certifying Mentor: Meera Kulkarni/.test(hero));
     const aside = await p.locator('aside').innerText();
-    assert.ok(aside.includes('Module pass marks') && aside.includes('3 of 8 met') && aside.includes('Critical gates: 5 of 15') && aside.includes('Deadlines'));
+    assert.ok(aside.includes('Module pass marks') && aside.includes('3 of 8 met') && aside.includes('Deadlines'));
+    assert.ok(!/critical gate|gates passed/i.test(await p.innerText('main')), 'critical gates are for mentors, TLs and admins only');
     assert.strictEqual(await p.locator('.mods li').count(), 8);
     const more = p.locator('.ready [data-act=cert-more]');
     assert.ok((await more.innerText()).includes('more'), 'the remaining items can be opened');
@@ -55,22 +56,66 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     assert.deepStrictEqual(p.errors, []); await p.context().close();
   });
 
-  await step('trainee: how the task is assessed, module text from the doc, deadline and AI setting', async () => {
-    const p = await open(browser, 'asha@fsksurat.in');
+  await step('trainee: module text opens with the task; answer boxes in it; reflection required; comments; no assessment details', async () => {
+    const bctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });   // one device, so it remembers where she left off
+    const p = await open(browser, 'bina@fsksurat.in', { reuse: bctx });
     await p.locator('.node[data-c="1"]').click();
     const c = await openCard(p, 'Case Studies 01');
-    assert.ok((await c.innerText()).includes('No due date set yet'));
-    await c.locator('details.rubric > summary').click();
-    assert.ok((await c.locator('details.rubric').innerText()).includes('Scenario 1'), 'case-study scenarios are shown');
-    assert.ok((await c.locator('details.rubric').innerText()).includes('4 Strong'), 'what each score means');
-    await c.locator('[data-act=doc]').click();
-    await c.locator('.docbody').waitFor();
-    assert.ok((await c.locator('.docbody').innerText()).includes('Scenario 1'), 'text from the doc appears in the app');
-    await c.locator('[data-act=doc]').click(); assert.strictEqual(await c.locator('.docbody').count(), 0);
-    await p.locator('.node[data-c="6"]').click();
-    const t = await openCard(p, 'Observe SC meetings');                                   // no doc section in the sample doc
-    assert.ok((await t.innerText()).includes('AI: Not allowed') && /Due \d+ \w+/.test(await t.innerText()), 'deadline and AI setting set by the TL');
-    await t.locator('[data-act=doc]').click(); await p.waitForSelector('.note:has-text("not in the app yet")');
+    await c.locator('.docbody textarea').first().waitFor();
+    const txt = await c.innerText();
+    assert.ok(txt.includes('Scenario 1'), 'text from the doc appears as soon as the task opens');
+    assert.ok(!/How it is assessed|How you'll be assessed|Critical gate|4 Strong/.test(txt), 'no rubric, gate or scoring detail for the trainee');
+    assert.strictEqual(await c.locator('.docbody textarea[data-w=a]').count(), 15, 'three boxes for each of the five scenarios');
+    assert.ok(txt.includes('4 of 15 answer boxes filled'));
+    assert.ok(await c.locator('label', { hasText: 'Who else would you involve' }).count() >= 1);
+    assert.ok(txt.includes(P.defaultReflection) && txt.includes('Good start on scenario 1'), 'standard reflection question and the TL comment');
+    assert.strictEqual(await c.locator('[data-act=comment]').count(), 0, 'a trainee cannot add comments');
+    const box = c.locator('.docbody textarea[data-w=a]').nth(5);
+    await box.fill('Speak to the class teacher today and agree a check-in.');
+    await p.waitForSelector('.savestate:has-text("Saved at")');
+    assert.ok((await card(p, 'Case Studies 01').innerText()).includes('5 of 15 answer boxes filled'));
+    W.as('bina@fsksurat.in'); const w = W.call('getTaskWork', ['bina@fsksurat.in', '1.2']);
+    assert.ok(Object.values(w.a).includes('Speak to the class teacher today and agree a check-in.'), 'saved on the server without pressing anything');
+    const r = card(p, 'Case Studies 01').locator('textarea[data-w=r]').first(); await r.fill('');
+    await p.waitForSelector('.savestate:has-text("Saved at")');
+    await card(p, 'Case Studies 01').locator('[data-act=submit]').click(); await toast(p, 'Answer every reflection question', true);
+    assert.ok(await p.evaluate(() => document.activeElement.dataset.w === 'r'), 'the empty question gets the focus');
+    await p.screenshot({ path: path.join(shots, '2-answers.png'), fullPage: false });
+    await p.close();
+    // typing kept on the device (the page closed before it was sent) is put back and saved; the app reopens the task left off
+    const q = await open(browser, 'bina@fsksurat.in', { reuse: bctx });
+    assert.strictEqual(await card(q, 'Case Studies 01').locator('.docbody').count(), 1, 'reopens where the trainee left off');
+    const key = await card(q, 'Case Studies 01').locator('textarea[data-w=r]').first().getAttribute('data-k');
+    await q.evaluate(k => localStorage.setItem(D.config.storagePrefix + ':work:bina@fsksurat.in|1.2', JSON.stringify({ r: { [k]: 'Typed just before the laptop closed.' } })), key);
+    await q.reload(); await q.waitForSelector('.top');
+    await q.locator('textarea[data-w=r]').first().waitFor();
+    assert.strictEqual(await q.locator('textarea[data-w=r]').first().inputValue(), 'Typed just before the laptop closed.');
+    await q.waitForSelector('.savestate:has-text("Saved at")');
+    await card(q, 'Case Studies 01').locator('[data-act=submit]').click(); await toast(q, 'Submitted for review');
+    assert.strictEqual(await card(q, 'Case Studies 01').locator('textarea').count(), 0, 'read-only once submitted');
+    assert.ok((await card(q, 'Case Studies 01').innerText()).includes('Speak to the class teacher today'));
+    await q.locator('.node[data-c="7"]').click(); const d = await openCard(q, 'Dummy Session');
+    assert.ok((await d.innerText()).includes('Session plan to TL'), 'the timeline the TL wrote');
+    assert.deepStrictEqual(q.errors, []); await q.context().close();
+  });
+
+  await step('mentor/TL: reads the answers and reflection, adds a review comment, writes a timeline', async () => {
+    const p = await open(browser, 'tl@fsksurat.in');
+    const rv = p.locator('.rv', { hasText: 'Case Studies 01' });
+    await rv.locator('.ans.ro').first().waitFor();
+    const t = await rv.innerText();
+    assert.ok(t.includes('5 of 15 filled') && t.includes('Speak to the class teacher today') && t.includes('Typed just before the laptop closed'));
+    await p.locator('.tab', { hasText: 'Trainee' }).click(); await p.locator('select[data-act=pick]').selectOption('bina@fsksurat.in');
+    await p.locator('.node[data-c="1"]').click();
+    const c = await openCard(p, 'Case Studies 01');
+    assert.ok((await c.innerText()).includes('How it is assessed'), 'staff see the rubric');
+    await c.locator('[data-f=comment]').fill('Scenario 2: who would you tell first?');
+    await c.locator('[data-act=comment]').click(); await toast(p, 'Comment added');
+    assert.ok((await card(p, 'Case Studies 01').innerText()).includes('Scenario 2: who would you tell first?'));
+    await p.locator('.node[data-c="7"]').click(); const d = await openCard(p, 'Dummy Session');
+    await d.locator('[data-plan=timeline]').fill('Topic: 3 Nov\nPlan: 10 Nov'); await d.locator('[data-act=plan]').click(); await toast(p, 'Plan saved');
+    assert.strictEqual(W.call('getBootstrap').trainees.find(x => x.id === 'bina@fsksurat.in').p['5.2'].timeline, 'Topic: 3 Nov\nPlan: 10 Nov');
+    await p.screenshot({ path: path.join(shots, '2b-staff-task.png'), fullPage: false });
     assert.deepStrictEqual(p.errors, []); await p.context().close();
   });
 
@@ -79,8 +124,7 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     const t = await open(browser, 'asha@fsksurat.in'); await t.locator('.node[data-c="3"]').click();
     const tc = await openCard(t, 'About the school');
     const txt = await tc.innerText();
-    assert.ok(!txt.includes(STD) && !/Competency standard/i.test(txt.replace(/competency standard for the role/i, '')), 'the trainee sees neither the standard nor a heading for it');
-    assert.ok(txt.includes('scores this task against the competency standard for the role'));
+    assert.ok(!txt.includes(STD) && !/Competency standard|How it is assessed/i.test(txt), 'the trainee sees neither the standard nor a heading for it');
     assert.ok(!(await t.content()).includes(STD), 'it is not even in the page');
     await t.context().close();
     const p = await open(browser, 'tl@fsksurat.in'); await p.locator('.tab', { hasText: 'Trainee' }).click(); await p.locator('select[data-act=pick]').selectOption('asha@fsksurat.in'); await p.locator('.node[data-c="3"]').click();
@@ -99,20 +143,21 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     assert.ok(!/G10|for example/i.test(await c.locator('.checkform').innerText()), 'no format or example is suggested for the student code');
     assert.strictEqual(await c.locator('[data-cl=code]').getAttribute('placeholder'), 'The code you use for this student');
     await c.locator('[data-cl=item]').evaluateAll(xs => xs.forEach(x => x.click()));
-    await c.locator('[data-act=checklist]').click(); await toast(p, 'Enter the student code', true);
-    await card(p, 'Understanding the Student').locator('[data-cl=code]').fill('G10-S1');
-    await card(p, 'Understanding the Student').locator('[data-act=checklist]').click(); await toast(p, 'every item', true);
-    const c2 = card(p, 'Understanding the Student');
-    await c2.locator('[data-cl=code]').fill('g10-s1'); await c2.locator('[data-cl=item]').evaluateAll(xs => xs.forEach(x => x.click()));
-    await c2.locator('[data-act=checklist]').click(); await toast(p, 'Checklist saved');
+    assert.ok((await c.locator('[data-clstate]').innerText()).includes('14 of 14 items ticked, no student code yet'), 'nothing is saved without a code');
+    await c.locator('[data-cl=code]').fill('G10-S1'); await c.locator('[data-cl=code]').blur(); await toast(p, 'Checklist saved for G10-S1');
     assert.ok((await card(p, 'Understanding the Student').innerText()).includes('1 of 2 students done'));
     const c3 = card(p, 'Understanding the Student');
-    await c3.locator('[data-cl=code]').fill('Student 7'); await c3.locator('[data-cl=item]').evaluateAll(xs => xs.forEach(x => x.click()));
-    await c3.locator('[data-act=checklist]').click(); await toast(p, 'Checklist saved');
+    await c3.locator('[data-cl=code]').fill('Student 7');
+    assert.ok((await c3.locator('[data-clstate]').innerText()).includes('0 of 14 items ticked'));
+    await c3.locator('[data-cl=item]').evaluateAll(xs => xs.slice(0, 13).forEach(x => x.click()));
+    assert.ok((await c3.locator('[data-clstate]').innerText()).includes('13 of 14') && (await c3.locator('[data-clstate]').innerText()).includes('Every item is required'));
+    await c3.locator('[data-cl=item]').last().click(); await toast(p, 'Checklist saved for Student 7');
     const c4 = card(p, 'Understanding the Student');
     assert.ok(await c4.locator('[data-act=submit]').isEnabled());
     await p.screenshot({ path: path.join(shots, '2-checklist.png'), fullPage: true });
-    await c4.locator('[data-f=evidence]').fill('Notes for g10-s1 and Student 7 in the restricted folder');
+    await c4.locator('[data-w=e]').fill('Notes for G10-S1 and Student 7 in the restricted folder');
+    for (const r of await c4.locator('textarea[data-w=r]').all()) await r.fill('I checked consent first and kept to the student code.');
+    await p.waitForSelector('.savestate:has-text("Saved at")');
     await c4.locator('[data-act=submit]').click(); await toast(p, 'Submitted for review');
     assert.deepStrictEqual(p.errors, []); await p.context().close();
   });
@@ -128,7 +173,7 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     assert.ok((await rv.locator('[data-result]').innerText()).includes('Scored 2 of 3'));
     await rv.locator('label[for$="-3"]').nth(2).click();
     assert.ok((await rv.locator('[data-result]').innerText()).includes('Score 3, Secure. Result: Complete'), '(4+3+3)/3 = 3.33 rounds to 3');
-    await rv.locator('textarea').fill('Good focus on what was seen rather than guessed.');
+    await rv.locator('[data-f=feedback]').fill('Good focus on what was seen rather than guessed.');
     await rv.locator('[data-act=assess]').click(); await toast(p, 'Assessment saved');
     assert.strictEqual(await p.locator('.rv', { hasText: 'Observe DP classes' }).count(), 0, 'leaves the queue once assessed');
     assert.deepStrictEqual(p.errors, []); await p.context().close();
@@ -136,16 +181,16 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
 
   await step('mentor/TL: a critical error makes the task not yet met, needs a description, and shows to the trainee', async () => {
     const p = await open(browser, 'tl@fsksurat.in');
-    const rv = p.locator('.rv', { hasText: 'Understanding the Student' });
+    const rv = p.locator('.rv', { hasText: '6.3 Understanding the Student' });
     await rv.locator('label[for$="-4"]').evaluateAll(ls => ls.forEach(l => l.click()));
     assert.ok((await rv.locator('[data-result]').innerText()).includes('Score 4, Strong'));
     await rv.locator('select[data-f=critical]').selectOption(P.criticalErrors[1][0]);
-    const rv2 = p.locator('.rv', { hasText: 'Understanding the Student' });
+    const rv2 = p.locator('.rv', { hasText: '6.3 Understanding the Student' });
     assert.ok((await rv2.locator('[data-result]').innerText()).includes('Critical error: not yet met'));
     assert.ok((await rv2.innerText()).includes('For example: Noting a self-harm remark'));
     await rv2.locator('[data-act=assess]').click(); await toast(p, 'Describe what happened', true);
-    await p.locator('.rv', { hasText: 'Understanding the Student' }).locator('textarea').fill('Did not tell the WBC about a remark. Meeting booked with TL.');
-    await p.locator('.rv', { hasText: 'Understanding the Student' }).locator('[data-act=assess]').click(); await toast(p, 'Assessment saved');
+    await p.locator('.rv', { hasText: '6.3 Understanding the Student' }).locator('[data-f=feedback]').fill('Did not tell the WBC about a remark. Meeting booked with TL.');
+    await p.locator('.rv', { hasText: '6.3 Understanding the Student' }).locator('[data-act=assess]').click(); await toast(p, 'Assessment saved');
     await p.context().close();
     const t = await open(browser, 'asha@fsksurat.in');
     assert.ok((await t.locator('.hero2').innerText()).includes('Critical error to reattempt: 6.3'));
@@ -201,7 +246,7 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     const mime = { pdf: 'application/pdf', png: 'image/png', txt: 'text/plain', xlsx: 'application/vnd.ms-excel', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
     W.as('bina@fsksurat.in');
     ['sample.pdf', 'sample.docx', 'sample.png', 'notes.txt', 'budget.xlsx'].forEach(n => W.call('uploadEvidence', ['3.1', n, mime[n.split('.').pop()], fx(n).toString('base64')]));
-    W.call('saveMyTask', ['3.1', 'submit', 'See files', '']);
+    W.call('autosaveTask', ['3.1', { r: { 'r-default': 'Three ideas I will use with my group.' } }]); W.call('saveMyTask', ['3.1', 'submit', 'See files']);
     const p = await open(browser, ADMIN);
     const cards = p.locator('.rv'), n = await cards.count();
     for (let i = 0; i < n; i++) assert.ok((await cards.nth(i).locator('.who').innerText()).trim().length > 2);
@@ -270,9 +315,10 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     assert.ok(panel.includes('Last refreshed') && panel.includes('Not found in the doc'), 'reports the sections the sample doc does not have');
     const row = p.locator('li', { hasText: 'Programme Guide' }).first();
     await row.locator('[data-act=task-edit]').click();
-    await p.selectOption('#tf-ai', 'no'); await p.check('[data-tf=real]'); await p.fill('[data-tf=students]', '2');
+    await p.fill('#tf-tname', 'Programme Guide (read)'); await p.selectOption('#tf-ai', 'no'); await p.check('[data-tf=real]'); await p.fill('[data-tf=students]', '2');
     await p.locator('[data-act=task-save]').click(); await toast(p, 'Task saved');
-    const t = W.call('getBootstrap').tasks.find(x => x.id === '2.5'); assert.ok(t.real && t.students === 2 && t.ai === 'no');
+    const t = W.call('getBootstrap').tasks.find(x => x.id === '2.5'); assert.ok(t.real && t.students === 2 && t.ai === 'no' && t.traineeName === 'Programme Guide (read)');
+    assert.ok((await p.innerText('main')).includes('Answer boxes and reflection questions per task'));
     await p.locator('li', { hasText: 'Books, Videos and Articles' }).first().locator('[data-act=rub-edit]').click();
     await p.locator('[data-act=rub-add]').click();
     await p.locator('#rubed .rubrow').last().locator('input[data-rf=criterion]').fill('Links to a real moment in my practice');
@@ -291,7 +337,8 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     const p = await open(browser, 'asha@fsksurat.in');
     await p.locator('.tab', { hasText: 'Guide' }).click();
     const g = await p.innerText('main');
-    for (const x of ['Scores and pass marks', '4 Strong', 'Critical gates and critical errors', 'Entering identifiable student information into an AI tool', 'Using AI tools', 'Working with real students', 'Becoming student champion certified', 'at least 60% in every module and 70% in modules 1, 6, 7', 'add up to 100%']) assert.ok(g.includes(x), x);
+    assert.ok(!g.includes('Critical gates'), 'gates are not explained to trainees');
+    for (const x of ['Scores and pass marks', '4 Strong', 'Critical errors', 'Answers, reflection and saving', 'Entering identifiable student information into an AI tool', 'Using AI tools', 'Working with real students', 'Becoming student champion certified', 'at least 60% in every module and 70% in modules 1, 6, 7', 'add up to 100%']) assert.ok(g.includes(x), x);
     assert.strictEqual(await p.locator('.tw li').count(), 8);
     await p.locator('[data-act=doc]').first().click(); await p.locator('.docbody').first().waitFor();
     assert.ok((await p.locator('.docbody').first().innerText()).length > 50, 'the introduction from the doc is readable in the guide');
@@ -301,9 +348,8 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
   await step('mobile and dark mode render without errors or sideways scrolling', async () => {
     const p = await open(browser, 'asha@fsksurat.in', { viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no horizontal page scroll');
-    await p.locator('.node[data-c="1"]').click(); await openCard(p, 'Case Studies 01');
-    await card(p, 'Case Studies 01').locator('details.rubric > summary').click();
-    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no horizontal page scroll with a rubric open');
+    await p.locator('.node[data-c="1"]').click(); await openCard(p, 'Case Studies 01'); await p.locator('.docbody').first().waitFor();
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no horizontal page scroll with the module text and answers open');
     await p.screenshot({ path: path.join(shots, '8-mobile-dark.png'), fullPage: false });
     assert.deepStrictEqual(p.errors, []); await p.context().close();
   });

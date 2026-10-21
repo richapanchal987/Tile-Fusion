@@ -10,18 +10,19 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 |---|---|---|---|---|---|
 | `Actions.gs` | Script (.gs) | `Actions` | 173 | 9 KB | `}` |
 | `Admin.gs` | Script (.gs) | `Admin` | 228 | 13 KB | `}` |
-| `AppAdmin.html` | HTML | `AppAdmin` | 100 | 19 KB | `</script>` |
-| `AppAssess.html` | HTML | `AppAssess` | 78 | 8 KB | `</script>` |
-| `AppCore.html` | HTML | `AppCore` | 127 | 11 KB | `</script>` |
-| `AppEvents.html` | HTML | `AppEvents` | 114 | 9 KB | `</script>` |
+| `AppAdmin.html` | HTML | `AppAdmin` | 102 | 20 KB | `</script>` |
+| `AppAssess.html` | HTML | `AppAssess` | 80 | 8 KB | `</script>` |
+| `AppCore.html` | HTML | `AppCore` | 128 | 11 KB | `</script>` |
+| `AppEvents.html` | HTML | `AppEvents` | 123 | 10 KB | `</script>` |
 | `AppFiles.html` | HTML | `AppFiles` | 87 | 7 KB | `</script>` |
 | `AppTeam.html` | HTML | `AppTeam` | 52 | 8 KB | `</script>` |
-| `AppTrainee.html` | HTML | `AppTrainee` | 197 | 21 KB | `</script>` |
+| `AppTrainee.html` | HTML | `AppTrainee` | 212 | 23 KB | `</script>` |
+| `AppWork.html` | HTML | `AppWork` | 137 | 11 KB | `</script>` |
 | `Art.html` | HTML | `Art` | 75 | 7 KB | `</script>` |
-| `Code.gs` | Script (.gs) | `Code` | 286 | 16 KB | `}` |
+| `Code.gs` | Script (.gs) | `Code` | 292 | 16 KB | `}` |
 | `Config.gs` | Script (.gs) | `Config` | 19 | 8 KB | `};` |
 | `DocSync.gs` | Script (.gs) | `DocSync` | 440 | 23 KB | `}` |
-| `Index.html` | HTML | `Index` | 25 | 1 KB | `</html>` |
+| `Index.html` | HTML | `Index` | 26 | 1 KB | `</html>` |
 | `Logic.gs` | Script (.gs) | `Logic` | 445 | 23 KB | `}` |
 | `Migrate.gs` | Script (.gs) | `Migrate` | 47 | 3 KB | `}` |
 | `SeedData.gs` | Script (.gs) | `SeedData` | 57 | 21 KB | `};` |
@@ -31,5 +32,5 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `SeedRubrics3.gs` | Script (.gs) | `SeedRubrics3` | 37 | 4 KB | `];` |
 | `Store.gs` | Script (.gs) | `Store` | 110 | 6 KB | `}` |
 | `Styles.html` | HTML | `Styles` | 214 | 19 KB | `</style>` |
-| `Styles2.html` | HTML | `Styles2` | 168 | 14 KB | `</style>` |
+| `Styles2.html` | HTML | `Styles2` | 192 | 16 KB | `</style>` |
 | `Work.gs` | Script (.gs) | `Work` | 55 | 3 KB | `}` |

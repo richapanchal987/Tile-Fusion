@@ -1,0 +1,137 @@
+<script>
+'use strict';
+/* Typed answers in the module text, the Reflection section, autosave and review comments on a task. */
+const WORK={},WLOAD=new Set(),DLOAD=new Set();   // WORK['trainee|task'] = {a,r,at,answers,reflection} from the server, kept up to date as the trainee types
+const PEND={},INFL={},SAVE={};                   // per task: changes not yet sent, changes being sent, and the save timer and state
+const wk=(trid,tid)=>trid+'|'+tid;
+const bkKey=tid=>D.config.storagePrefix+':work:'+D.me.email+'|'+tid;
+const has=o=>!!o&&Object.keys(o).some(k=>k==='evidence'||Object.keys(o[k]||{}).length);
+const filledN=(map,list)=>list.filter(q=>String((map||{})[q.key]||'').trim()).length;
+const hhmm=()=>new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+
+/** Loads the module text and the saved work of every open task on the page. Called after each render. */
+function loadOpenWork(){
+  document.querySelectorAll('[data-needwork]').forEach(el=>{
+    const trid=el.dataset.tr,tid=el.dataset.t,t=D.tasks.find(x=>x.id===tid),k=wk(trid,tid);
+    if(t&&t.doc&&!DOCS[t.doc]&&!DLOAD.has(t.doc)){DLOAD.add(t.doc);call('getContent',t.doc).then(d=>{DOCS[t.doc]=d}).catch(e=>{DOCS[t.doc]={found:false,err:(e&&e.message)||String(e)}}).finally(()=>{DLOAD.delete(t.doc);render()})}
+    if(!WORK[k]&&!WLOAD.has(k)){WLOAD.add(k);call('getTaskWork',trid,tid).then(w=>{WORK[k]=w;if(trid===D.me.email)restoreBackup(tid)}).catch(e=>{WORK[k]={a:{},r:{},err:(e&&e.message)||String(e)}}).finally(()=>{WLOAD.delete(k);render()})}
+  });
+}
+
+/* ---------- answer boxes inside the module text ---------- */
+const ANS_RE=/<div class="ansbox" data-k="([^"]*)" data-l="([^"]*)" data-r="(\d+)" data-s="([01])"(?: data-h="([^"]*)")?><\/div>/g;
+function fillAnswers(html,trid,t,edit){
+  const w=WORK[wk(trid,t.id)],sl=slug(trid+'_'+t.id);
+  return html.replace(/<table>/g,'<div class="tw"><table>').replace(/<\/table>/g,'</table></div>').replace(ANS_RE,(m,k,l,r,s,h)=>{   // label and hint arrive escaped
+    const v=w?String(w.a[k]||''):'',id='aw-'+sl+'-'+k;
+    if(edit)return`<div class="ans${s==='1'?' shown':''}">${s==='1'?`<label for="${id}">${l}</label>`:''}${h?`<span class="hint">${h}</span>`:''}<textarea id="${id}" rows="${r}" data-w="a" data-k="${k}" data-t="${esc(t.id)}" ${s==='1'?'':`aria-label="${l}"`} ${w?'':'disabled'} placeholder="${w?'Type your answer':'Loading…'}">${esc(v)}</textarea></div>`;
+    return`<div class="ans ro">${s==='1'?`<b>${l}</b>`:''}<p class="${v?'':'hint'}">${w?(v?esc(v):'Not answered'):'Loading…'}</p></div>`;
+  });
+}
+/** The module text of a task, open while the task is open. A trainee types straight into its answer boxes. */
+function taskText(trid,t,edit){
+  if(!t.doc)return'';
+  const d=DOCS[t.doc];
+  const body=!d?'<p class="hint">Loading the module text…</p>':d.found?`<div class="docbody work">${fillAnswers(d.html,trid,t,edit)}</div>`:`<p class="note amber">${d.err?esc(d.err):'This section is not in the app yet. An admin can press &ldquo;Refresh from the doc&rdquo; in Curriculum.'}</p>`;
+  const n=t.nAnswers,w=WORK[wk(trid,t.id)];
+  const count=n?`<p class="hint" data-cnt="a|${esc(t.id)}">${w?answerCount(w,n):''}</p>`:'';
+  return`<div class="kv"><h4>Module text${n?' and your answers':''}</h4>${n&&edit?`<p class="hint">Type your answers in the boxes in the text. They are optional; fill in what shows your thinking.</p>`:''}${count}${body}</div>`;
+}
+const answerCount=(w,n)=>`${filledN(w.a,w.answers||[])} of ${n} answer box${n===1?'':'es'} filled.`;
+
+/* ---------- reflection ---------- */
+function reflectionBox(trid,t,edit){
+  const qs=t.refl||[],w=WORK[wk(trid,t.id)],sl=slug(trid+'_'+t.id);
+  let g=null,h='';
+  qs.forEach((q,i)=>{
+    if(q.group!==g){g=q.group;if(g)h+=`<h5 class="rgrp">${esc(g)}</h5>`}
+    const v=w?String(w.r[q.key]||''):'',id='rw-'+sl+'-'+i;
+    h+=edit?`<div class="ans q"><label for="${id}">${esc(q.label)}</label><textarea id="${id}" rows="3" data-w="r" data-k="${esc(q.key)}" data-t="${esc(t.id)}" ${w?'':'disabled'} placeholder="${w?'Your reflection':'Loading…'}">${esc(v)}</textarea></div>`
+      :`<div class="ans ro"><b>${esc(q.label)}</b><p class="${v?'':'hint'}">${w?(v?esc(v):'Not answered'):'Loading…'}</p></div>`;
+  });
+  return`<div class="kv reflect"><h4>${ico('spark',16)} Reflection <span class="hint">${edit?'required before you submit':''}</span></h4><p class="hint" data-cnt="r|${esc(t.id)}">${w?reflCount(w,qs):''}</p>${h}${edit?'<p class="hint">Never write a student\'s name or details that identify them. Use the student code.</p>':''}</div>`;
+}
+const reflCount=(w,qs)=>{const n=filledN(w.r,qs);return`${n} of ${qs.length} question${qs.length===1?'':'s'} answered${n<qs.length?'':'. Ready.'}`};
+function updateCounts(tid){
+  const t=D.tasks.find(x=>x.id===tid),w=WORK[wk(D.me.email,tid)];if(!t||!w)return;
+  const a=document.querySelector(`[data-cnt="a|${CSS.escape(tid)}"]`),r=document.querySelector(`[data-cnt="r|${CSS.escape(tid)}"]`);
+  if(a)a.textContent=answerCount(w,t.nAnswers);if(r)r.textContent=reflCount(w,t.refl||[]);
+}
+
+/* ---------- autosave ---------- */
+function setSS(tid,text,bad){document.querySelectorAll(`[data-ss="${CSS.escape(tid)}"]`).forEach(e=>{e.textContent=text;e.classList.toggle('bad',!!bad)})}
+const ssText=tid=>{const s=SAVE[tid]||{};return s.text||'Your work saves as you type.'};
+function typed(el){
+  const tid=el.dataset.t,kind=el.dataset.w,trid=D.me.email,w=WORK[wk(trid,tid)];
+  const p=PEND[tid]=PEND[tid]||{};
+  if(kind==='e'){p.evidence=el.value;const tr=T(trid);if(tr){tr.p[tid]=Object.assign(P(tr,tid),{evidence:el.value})}}
+  else{if(!w)return;w[kind][el.dataset.k]=el.value;(p[kind]=p[kind]||{})[el.dataset.k]=el.value;updateCounts(tid)}
+  backup(tid);
+  const s=SAVE[tid]=SAVE[tid]||{};clearTimeout(s.timer);s.text='Saving…';setSS(tid,'Saving…');s.timer=setTimeout(()=>flushSave(tid),1500);
+}
+const merge=(a,b)=>{const o={a:Object.assign({},(a||{}).a,(b||{}).a),r:Object.assign({},(a||{}).r,(b||{}).r)};const e=(b&&b.evidence!==undefined)?b.evidence:a&&a.evidence;if(e!==undefined)o.evidence=e;return o};
+function backup(tid){try{const all=merge(INFL[tid],PEND[tid]);if(has(all))localStorage.setItem(bkKey(tid),JSON.stringify(all));else localStorage.removeItem(bkKey(tid))}catch(e){}}
+/** Typing that never reached the server (the page was closed or the connection dropped) is put back and saved. */
+function restoreBackup(tid){
+  let b=null;try{b=JSON.parse(localStorage.getItem(bkKey(tid))||'null')}catch(e){}
+  const w=WORK[wk(D.me.email,tid)];if(!has(b)||!w)return;
+  const p=P(T(D.me.email),tid);if(!['not','progress','partial','rework'].includes(p.status)){try{localStorage.removeItem(bkKey(tid))}catch(e){}return}
+  ['a','r'].forEach(k=>Object.assign(w[k],b[k]||{}));
+  PEND[tid]=merge(b,PEND[tid]);flushSave(tid);
+}
+function flushSave(tid){
+  const s=SAVE[tid]=SAVE[tid]||{};clearTimeout(s.timer);
+  if(s.busy){s.again=true;return s.busy}
+  if(!has(PEND[tid]))return Promise.resolve();
+  const data=INFL[tid]=PEND[tid];delete PEND[tid];
+  s.text='Saving…';setSS(tid,s.text);
+  s.busy=call('autosaveTask',tid,data).then(r=>{
+    delete INFL[tid];backup(tid);
+    const tr=T(D.me.email);if(tr)tr.p[tid]=Object.assign(P(tr,tid),{status:r.status,answered:r.answered,reflected:r.reflected});
+    s.text='Saved at '+hhmm()+'.';s.failed=0;if(!has(PEND[tid]))setSS(tid,s.text);
+  }).catch(e=>{
+    PEND[tid]=merge(data,PEND[tid]);delete INFL[tid];s.failed=(s.failed||0)+1;
+    const msg=(e&&e.message)||String(e),fatal=/submitted|completed|Only trainees|not part/.test(msg);
+    s.text=fatal?msg:'Not saved yet: '+msg+' Your typing is kept on this device and will be tried again.';setSS(tid,s.text,true);
+    if(!fatal)s.timer=setTimeout(()=>flushSave(tid),Math.min(60000,5000*s.failed));else delete PEND[tid];
+  }).finally(()=>{s.busy=null;if(s.again){s.again=false;if(has(PEND[tid]))flushSave(tid)}});
+  return s.busy;
+}
+/** Waits until everything typed in a task is saved. True when it is. */
+async function flushNow(tid){
+  for(let i=0;i<6;i++){const s=SAVE[tid]||{};if(s.busy){await s.busy;continue}if(has(PEND[tid])){await flushSave(tid);if((SAVE[tid]||{}).failed)return false;continue}return true}
+  return !has(PEND[tid])&&!has(INFL[tid]);
+}
+const unsaved=()=>Object.keys(PEND).some(k=>has(PEND[k]))||Object.keys(INFL).some(k=>has(INFL[k]));
+window.addEventListener('beforeunload',e=>{if(unsaved()){Object.keys(PEND).forEach(flushSave);e.preventDefault();e.returnValue=''}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')Object.keys(PEND).forEach(flushSave)});
+
+/** Submit: save the last typing, check the reflection is complete, then send for review. */
+async function submitTask(form){
+  const tid=form.dataset.t,t=D.tasks.find(x=>x.id===tid),w=WORK[wk(D.me.email,tid)];
+  if(!w){toast('Your saved work is still loading. Try again in a moment.',true);return}
+  toast('Saving your latest work…');
+  if(!(await flushNow(tid))){toast('Your latest typing could not be saved, so the task was not submitted. Check your connection and try again.',true);return}
+  const left=(t.refl||[]).filter(q=>!String(w.r[q.key]||'').trim());
+  if(left.length){toast(`Answer every reflection question before you submit (${left.length} still empty).`,true);const el=(form.closest('.tbody')||form).querySelector(`textarea[data-w="r"][data-k="${CSS.escape(left[0].key)}"]`);if(el)el.focus();return}
+  const ev=form.querySelector('[data-w=e]');
+  openSet.add(UI.tid+'|'+tid);
+  run('saveMyTask',[tid,'submit',ev?ev.value:null],'Submitted for review');
+}
+
+/* ---------- review comments ---------- */
+function commentsBox(tr,t){
+  const cs=(tr.comments||[]).filter(c=>c.task===t.id),staff=isStaff(),sl=slug(tr.id+'_'+t.id);
+  if(!cs.length&&!staff)return'';
+  return`<div class="kv comments"><h4>${ico('users',16)} Review comments</h4>${cs.length?`<ul class="cmts">${cs.map(c=>`<li><p>${esc(c.text)}</p><span class="hint">${esc(c.name)}, ${fmtDate(c.at)}</span></li>`).join('')}</ul>`:'<p class="hint">No comments yet.</p>'}
+    ${staff?`<div class="cmform" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}"><div class="field"><label for="cm-${sl}">Add a comment for ${esc(tr.name)}</label><textarea id="cm-${sl}" data-f="comment" rows="2">${esc(dv(tr.id,t.id,'comment',''))}</textarea></div><div class="row"><button class="btn small" data-act="comment">Add comment</button><span class="hint">${esc(WD.trainee)} sees it on this task.</span></div></div>`:''}</div>`;
+}
+
+/** What a reviewer reads: the filled answer boxes and the reflection. */
+function workSummary(tr,t){
+  const w=WORK[wk(tr.id,t.id)],need=`<span data-needwork data-tr="${esc(tr.id)}" data-t="${esc(t.id)}"></span>`;
+  if(!w)return`<div class="kv">${need}<h4>Answers and reflection</h4><p class="hint">Loading…</p></div>`;
+  const ans=(w.answers||[]).filter(q=>String(w.a[q.key]||'').trim());
+  return`<div class="kv">${need}<h4>Answers <span class="hint">${ans.length} of ${(w.answers||[]).length} filled</span></h4>${ans.map(q=>`<div class="ans ro"><b>${esc(q.label)}</b><p>${esc(w.a[q.key])}</p></div>`).join('')||'<p class="hint">No typed answers.</p>'}</div>${reflectionBox(tr.id,t,false)}`;
+}
+</script>

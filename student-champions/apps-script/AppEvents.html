@@ -19,15 +19,7 @@ document.addEventListener('click',e=>{
     case'doc':toggleDoc(ds.title);break;
     case'cert-more':UI.certAll=!UI.certAll;render();break;
     case'sync':run('refreshModuleText',[],'Module text refreshed from the doc','Reading the doc. This can take a minute.');break;
-    case'save':case'submit':{
-      const id=form.dataset.t,ev=$('[data-f=evidence]',form).value,rf=$('[data-f=reflection]',form).value;
-      if(a==='submit'&&!ev.trim()&&!(P(T(UI.tid),id).files||[]).length){toast('Add a link, reference or file as evidence before submitting.',true);return}
-      openSet.add(UI.tid+'|'+id);
-      run('saveMyTask',[id,a,ev,rf],a==='submit'?'Submitted for review':'Draft saved',null,()=>{delete DRAFT[dk(UI.tid,id,'evidence')];delete DRAFT[dk(UI.tid,id,'reflection')]});break}
-    case'checklist':{
-      const f=b.closest('.checkform'),id=f.dataset.t;
-      openSet.add(UI.tid+'|'+id);
-      run('saveChecklist',[id,$('[data-cl=code]',f).value,Array.from(f.querySelectorAll('[data-cl=item]')).map(x=>x.checked)],'Checklist saved');break}
+    case'submit':submitTask(form);break;
     case'rmfile':openSet.add(UI.tid+'|'+ds.t);run('removeEvidence',[ds.t,ds.fid],'File removed');break;
     case'openfile':openFile(ds.tr,ds.t,ds.fid);break;
     case'viewfile':toggleViewer(ds.tr,ds.t,ds.fid);break;
@@ -39,7 +31,8 @@ document.addEventListener('click',e=>{
       Object.keys(s.vals).forEach(k=>{if(k!=='single')criteria[k]=+s.vals[k]});
       openSet.add(tr+'|'+id);
       run('assessTask',[tr,id,{criteria:criteria,score:s.vals.single?+s.vals.single:'',exempt:s.exempt,critical:{type:s.critical},feedback:$('[data-f=feedback]',form).value}],'Assessment saved',null,()=>clearDrafts(tr,id));break}
-    case'plan':openSet.add(form.dataset.tr+'|'+form.dataset.t);run('setTaskPlan',[form.dataset.tr,form.dataset.t,$('[data-plan=due]',form).value,$('[data-plan=ai]',form).value],'Plan saved');break;
+    case'plan':{const tl=$('[data-plan=timeline]',form);openSet.add(form.dataset.tr+'|'+form.dataset.t);run('setTaskPlan',[form.dataset.tr,form.dataset.t,$('[data-plan=due]',form).value,$('[data-plan=ai]',form).value,tl?tl.value:null],'Plan saved');break}
+    case'comment':{const f=b.closest('.cmform'),tr=f.dataset.tr,id=f.dataset.t;openSet.add(tr+'|'+id);run('addComment',[tr,id,$('[data-f=comment]',f).value],'Comment added',null,()=>{delete DRAFT[dk(tr,id,'comment')]});break}
     case'grant':openSet.add(ds.tr+'|'+ds.t);run('grantReattempt',[ds.tr,ds.t],'Another reattempt allowed');break;
     case'certify':run('confirmCertification',[UI.tid,ds.lv,val('rd-note')],ds.lv==='notcertified'?'Certification withdrawn':D.config.levels.certified.label+' confirmed',null,()=>{if(ds.lv==='certified')celebrate(true)});break;
     case'enrol':run('enrolTrainee',[val('nt-name'),val('nt-email'),readPeople('nt'),val('nt-start')],WD.Trainee+' enrolled');break;
@@ -76,7 +69,9 @@ document.addEventListener('click',e=>{
 
 document.addEventListener('input',e=>{
   const el=e.target,ds=el.dataset;
-  if(ds.f){const box=el.closest('.myform')||el.closest('.assessform');if(box&&(ds.f==='evidence'||ds.f==='reflection'||ds.f==='feedback'))DRAFT[dk(box.dataset.tr,box.dataset.t,ds.f)]=el.value}
+  if(ds.w&&D.me.role==='Trainee'){typed(el);return}
+  if(ds.cl){checklistInput(el);return}
+  if(ds.f){const box=el.closest('.assessform')||el.closest('.cmform');if(box&&(ds.f==='feedback'||ds.f==='comment'))DRAFT[dk(box.dataset.tr,box.dataset.t,ds.f)]=el.value}
   if(ds.set!=null)SET[ds.set]=el.value;
   if(ds.ph!=null)PH[+ds.ph][ds.pf]=el.value;
   if(ds.tpf)UI.tpf[ds.tpf]=el.value;
@@ -85,11 +80,13 @@ document.addEventListener('input',e=>{
   if(ds.rb!=null){const r=UI.rub[+ds.rb];if(ds.rl!=null)r.levels[+ds.rl]=el.value;else r[ds.rf]=ds.rf==='show'?el.value==='1':el.value}
 });
 
+function checklistInput(el){const f=el.closest('.checkform');if(!f)return;const st=CLS[f.dataset.t];if(st&&el.dataset.cl==='code'){st.code=el.value;const x=$('[data-clstate]',f);if(x)x.textContent=clText(st,f.querySelectorAll('[data-cl=item]').length)}}
 document.addEventListener('change',async e=>{
   const el=e.target,ds=el.dataset;
   if(ds.act==='pick'){UI.tid=el.value;UI.cycle=null;render();return}
   if(ds.tf==='real'||ds.tf==='gate'){UI.tf[ds.tf]=el.checked;if(ds.tf==='real'&&el.checked&&!UI.tf.students)UI.tf.students=1;render();return}
   if(ds.tpf==='phase'){UI.tpf.phase=el.value;return}
+  if(ds.cl){checklistChanged(el.closest('.checkform'));return}
   if(ds.f&&el.closest('.assessform')){
     const form=el.closest('.assessform'),tr=form.dataset.tr,id=form.dataset.t;
     if(ds.f==='crit')DRAFT[dk(tr,id,'c'+ds.o)]=el.value;
@@ -107,8 +104,20 @@ document.addEventListener('change',async e=>{
     catch(er){toast(er.message,true)}
   }
 });
-document.addEventListener('toggle',e=>{const d=e.target;if(d.matches&&d.matches('details[data-key]')){d.open?openSet.add(d.dataset.key):openSet.delete(d.dataset.key)}},true);
+document.addEventListener('toggle',e=>{const d=e.target;if(!(d.matches&&d.matches('details[data-key]')))return;
+  const was=openSet.has(d.dataset.key);d.open?openSet.add(d.dataset.key):openSet.delete(d.dataset.key);
+  if(d.classList.contains('task')&&d.open!==was){if(d.open)remember(d.dataset.key);render()}},true);
+/** Where the trainee left off: the task they last opened, on this device. */
+const lastKey=()=>D.config.storagePrefix+':last:'+D.me.email;
+function remember(key){if(D.me.role!=='Trainee')return;try{localStorage.setItem(lastKey(),key.split('|').pop())}catch(e){}}
+function resume(){
+  if(!D||D.me.role!=='Trainee'||!D.tasks)return;let id=null;try{id=localStorage.getItem(lastKey())}catch(e){}
+  const t=id&&D.tasks.find(x=>x.id===id&&x.active),tr=T(D.me.email);if(!t||!tr)return;
+  if(['complete','exempt'].includes(P(tr,t.id).status))return;
+  UI.cycle=t.cycle;openSet.add(tr.id+'|'+t.id);UI.resumeTo=tr.id+'|'+t.id;
+}
 
 render();
-call('getBootstrap').then(d=>{setData(d);detectChanges();render()}).catch(e=>{$('#app').innerHTML=`<div class="center"><h2>The app couldn't load</h2><p class="muted">${esc((e&&e.message)||e)}</p></div>`});
+call('getBootstrap').then(d=>{setData(d);detectChanges();resume();render();
+  if(UI.resumeTo){const el=document.querySelector(`[data-key="${CSS.escape(UI.resumeTo)}"]`);if(el)el.scrollIntoView({block:'start'});toast('Opened where you left off.')}}).catch(e=>{$('#app').innerHTML=`<div class="center"><h2>The app couldn't load</h2><p class="muted">${esc((e&&e.message)||e)}</p></div>`});
 </script>

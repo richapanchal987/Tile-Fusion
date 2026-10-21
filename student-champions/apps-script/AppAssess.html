@@ -70,8 +70,10 @@ function vReview(){
     <h3>${esc(t.id)} ${esc(t.name)}</h3>
     <div class="kv"><h4>What was asked</h4><p>${esc(t.what)}</p></div>
     ${t.standard?`<div class="kv"><h4>Competency standard <span class="hint">(not shown to the ${esc(WD.trainee)})</span></h4><p>${esc(t.standard)}</p></div>`:''}
-    <div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>
-    ${p.reflection?`<div class="kv"><h4>${esc(WD.Trainee)}'s reflection</h4><p>${esc(p.reflection)}</p></div>`:''}
+    ${t.evidence||p.evidence||(p.files||[]).length?`<div class="kv"><h4>Evidence</h4>${evidenceView(tr,t,p)}</div>`:''}
+    ${p.reflection?`<div class="kv"><h4>Earlier reflection</h4><p>${esc(p.reflection)}</p></div>`:''}
+    ${workSummary(tr,t)}
+    ${commentsBox(tr,t)}
     ${p.feedback?`<div class="note amber"><b>Earlier feedback:</b> ${esc(p.feedback)}</div>`:''}
     ${assessForm(tr,t,p)}</article>`).join(''):`<div class="empty">${emptyArt('reviews')}<h3>All caught up</h3><p>No reviews waiting. When a ${WD.trainee} submits a task it appears here.</p></div>`}`;
 }

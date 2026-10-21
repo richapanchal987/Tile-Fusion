@@ -360,7 +360,31 @@ body.intro .task:nth-child(4),body.intro .tile:nth-child(4){animation-delay:.15s
 .docbody h3,.docbody h4,.docbody h5,.docbody h6{margin:14px 0 6px;font-size:15px}
 .docbody p{margin:0 0 8px;white-space:normal} .docbody ul,.docbody ol{margin:0 0 10px;padding-left:22px}
 .docbody table{display:block;overflow-x:auto;border-collapse:collapse;margin:8px 0;max-width:100%}
+.docbody .tw{overflow-x:auto;margin:14px 0} .docbody .tw table{display:table;width:100%;min-width:0;margin:0;table-layout:fixed}
+.docbody .tw table:has(td:nth-child(4)){min-width:640px}
+.docbody caption{font-weight:700;text-align:center;padding:6px 0;font-size:14.5px}
 .docbody td{border:1px solid var(--line);padding:6px 9px;vertical-align:top;min-width:90px}
+.docbody.work{max-height:none;overflow:visible;min-width:0}
+.cols>section,.cols>aside,.task,.tbody,.tbody>*{min-width:0} .tbody{grid-template-columns:minmax(0,1fr)}
+.docbody .dochead{text-align:center;margin:22px 0 10px;font-size:16px;letter-spacing:.02em}
+.ans{display:grid;gap:4px;margin:8px 0}
+.ans label,.ans>b{font-weight:600;font-size:14px}
+.ans textarea{width:100%;box-sizing:border-box;max-width:100%;min-height:64px;resize:vertical;font:inherit;font-size:14.5px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
+.ans textarea:focus{outline:2px solid var(--blue);outline-offset:1px}
+.ans.ro p{white-space:pre-line;margin:0;padding:6px 10px;border-left:3px solid var(--blue);background:var(--sunk);border-radius:0 8px 8px 0}
+.ans.ro p.hint{border-left-color:var(--line)}
+td .ans{margin:0}
+.reflect{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--bg)}
+.reflect .rgrp{margin:12px 0 2px;font-size:14px;color:var(--muted)}
+.savestate{font-size:13px;color:var(--muted)} .savestate.bad{color:var(--red);font-weight:600}
+.timeline{white-space:pre-line;border-left:3px solid var(--gold);padding:6px 10px;background:var(--sunk);border-radius:0 8px 8px 0}
+.cmts{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+.cmts li{border-left:3px solid var(--blue);padding:6px 10px;background:var(--sunk);border-radius:0 8px 8px 0}
+.cmts li p{margin:0 0 2px}
+.cmform{display:grid;gap:8px;margin-top:8px}
+.staffonly{border:1px dashed var(--line);border-radius:12px;padding:10px 14px}
+.clstate{font-size:13.5px;font-weight:600;margin:0}
+table.mini{min-width:0;width:auto;border-collapse:collapse;font-size:13.5px;margin:8px 0} table.mini td,table.mini th{border:1px solid var(--line);padding:4px 10px;text-align:left}
 .docbody .imgnote{color:var(--muted);font-style:italic}
 .clgroup{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:0}
 .clgroup legend{font-weight:600;font-size:13.5px;padding:0 6px}

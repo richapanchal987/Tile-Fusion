@@ -16,7 +16,7 @@ It is a separate copy of the Well-being Counsellor app (`../wellbeing-training/`
 | `tests/` | Logic, doc-converter, build, server and browser tests (see Testing). |
 | `screenshots/` | The app in light and dark mode, for presentations. |
 
-Files in `apps-script/`: `Code.gs` (sign-in, Sheet storage), `Logic.gs` (rules, no Google calls), `Actions.gs` (what trainees and mentors do), `Admin.gs` (people and curriculum), `DocSync.gs` (module text from the Google Doc), `Config.gs`, `SeedData.gs`, `SeedRubrics*.gs` (generated), and the interface: `Index.html`, `Styles.html`, `Styles2.html`, `Art.html`, `AppCore.html`, `AppTrainee.html`, `AppAssess.html`, `AppTeam.html`, `AppAdmin.html`, `AppFiles.html`, `AppEvents.html`. No file is over 25 KB, and **the order you add files in does not matter**.
+Files in `apps-script/`: `Code.gs` (sign-in, Sheet storage), `Logic.gs` (rules, no Google calls), `Actions.gs` (what trainees and mentors do), `Admin.gs` (people and curriculum), `Work.gs` (typed answers, reflection, autosave, comments), `Store.gs` (reading and writing the Sheet, with a cache), `Migrate.gs` (one-off updates for an existing Sheet), `DocSync.gs` (module text from the Google Doc), `Config.gs`, `SeedData.gs`, `SeedRubrics*.gs` (generated), and the interface: `Index.html`, `Styles.html`, `Styles2.html`, `Art.html`, `AppCore.html`, `AppTrainee.html`, `AppAssess.html`, `AppTeam.html`, `AppAdmin.html`, `AppFiles.html`, `AppWork.html`, `AppEvents.html`. No file is over 25 KB, and **the order you add files in does not matter**.
 
 ## Set up (about 20 minutes, once)
 
@@ -39,16 +39,19 @@ Change the files in the editor, then **Deploy > Manage deployments > pencil > Ne
 
 | | New joiner (trainee) | Mentor / TL | Certifying Mentor | Admin |
 |---|---|---|---|---|
-| See own training, read module text, submit evidence, complete consent checklists | yes | | | |
+| See own training, type answers and reflection, submit, complete consent checklists, read review comments | yes | | | |
 | See trainees | only themselves | those they are assigned to (mentor, TL or certifying mentor), plus any not yet assigned | same | all |
 | Score rubrics, record live observations, flag a critical error | | yes | yes | yes |
-| Agree a due date and AI permission for a task | | yes | yes | yes |
+| Agree a due date, AI permission and (for the dummy session) a timeline | | yes | yes | yes |
+| Add review comments on any task; read answers and reflection | | yes | yes | yes |
 | Confirm *Student Champion certified* | | | **yes** | |
 | Withdraw certification | | | yes | yes |
 | Allow an extra reattempt | | | | yes |
 | Enrol people, manage staff, edit modules, tasks, rubrics, settings, refresh module text, read the log | | | | yes |
 
-A person can hold any combination: the Staff table has a role (Mentor/TL or Admin) and a separate "Can certify" tick.
+A person can hold any combination: the Staff table has a role (Mentor/TL or Admin) and a separate "Can certify" tick. Experienced Student Champions who act as mentors are added under Staff as Mentor/TL and assigned to a trainee as mentor.
+
+**Staff only:** the rubric ("How it is assessed"), the competency standard, which tasks are critical gates and the full name of 7.4 (trainees see "RMC"). The server never sends these to a trainee; a trainee's certification card says "Some required tasks are not yet signed off by your mentor or TL" instead of naming gates.
 
 ## The programme
 
@@ -67,14 +70,14 @@ A person can hold any combination: the Staff table has a role (Mentor/TL or Admi
 | 8 Final Readiness & Portfolio | 12% | 60% | 8.1 Viva (12), 8.2 Graduation Presentation (13) |
 
 - **Phases belong to modules:** Foundation (1-2), Skill Development (3-5), Applied Practice (6-7), Final Readiness (8). A cycle that holds tasks from two phases takes the phase of its first task.
-- **Critical gates (15):** 1.1, 1.2, 1.3, 1.4, 1.5, 4.6, 5.2, 6.3, 6.4, 7.1, 7.2, 7.3, 7.4, 7.5, 8.1. Change them in **Curriculum** whenever you like (the plan is to review them at the demo with trainees).
+- **Critical gates (15, staff only):** 1.1, 1.2, 1.3, 1.4, 1.5, 4.6, 5.2, 6.3, 6.4, 7.1, 7.2, 7.3, 7.4, 7.5, 8.1. Change them in **Curriculum** whenever you like (the plan is to review them at the demo with trainees).
 
 ## How scoring, pass marks and certification work
 
 - **One scale, 1 to 4:** 1 Not yet met, 2 Developing, 3 Secure, 4 Strong.
 - **Rubrics.** Each task has a rubric of criteria. The mentor/TL scores every criterion 1 to 4; the **task score is the average, rounded up at .5**. The task's result follows from it: 3 or 4 is **Complete**; 2 is **Developing** (half credit; the trainee reattempts after feedback); 1 is **Not yet met**. A critical gate needs Complete with a score of at least the pass score (default 3).
-- **Rubric content.** Nine tasks have rubrics from your workbook tabs (Role; both Case Studies; POCSO; SC Principles; Programme Specific; Q&A; Worksheet; Dummy Session). Where a tab listed criteria but left the level descriptions blank, the app shows the standard meaning of each score. For Q&A the five levels became four (1, 2 and 3 as written; 4 uses "Excellent"). The other tasks get their criteria from the competency standard in your tracker. **Admins can edit any rubric in Curriculum > Rubric** (criteria, level descriptions, groups, and "reference only" rows that are shown but not scored). The Parent and Student Guidebook rubrics are attached to task 2.5 as reference only.
-- **The competency standard is private to staff.** Mentors, TLs and admins see it on the task and in Reviews; a trainee never receives it. Rubric criteria that were built only from the standard (plain criteria with no description or level text) are scored by mentors but hidden from the trainee, who sees a line saying the task is scored against the competency standard. Rubrics from your workbook tabs stay visible to trainees. In **Curriculum > Rubric** every criterion has a "Shown to the trainee" choice, so you can change this row by row.
+- **Rubric content.** Nine tasks have rubrics from your workbook tabs (Role; both Case Studies; POCSO; SC Principles; Programme Specific; Q&A; Worksheet; Dummy Session). Where a tab listed criteria but left the level descriptions blank, the app shows the standard meaning of each score. For Q&A the five levels became four (1, 2 and 3 as written; 4 uses "Excellent"). The other tasks get their criteria from the competency standard in your tracker. **Admins can edit any rubric in Curriculum > Rubric** (criteria, level descriptions, groups, and "reference only" rows that are shown but not scored). 
+- **Rubrics and the competency standard are private to staff.** Mentors, TLs and admins see them on the task and in Reviews; a trainee never receives them.
 - **Training completion** counts only an assessor's decision: Complete and Exempt are full credit, Developing is half.
 - **Module percentage** = the score out of 4 on each task of the module, weighted, with unassessed work counting as zero. A module must reach its **pass mark: 60%, or 70% in modules 1, 6 and 7**. The trainee sees this on a "Module pass marks" card, the Team dashboard shows "x of 8 met".
 - **Critical errors.** A mentor/TL can pick one of the seven errors from the module (promising confidentiality where it cannot be kept, failing to escalate, investigating an allegation, diagnosing or labelling, sharing information inappropriately, breaching a boundary, entering student information into an AI tool). The task becomes **Not yet met** with score 1 whatever the criteria say, the trainee sees why, and it shows on the Team dashboard until a good reattempt clears it.
@@ -86,6 +89,21 @@ A person can hold any combination: the Staff table has a role (Mentor/TL or Admi
 - **Deadlines.** The module says timelines are agreed with the mentor and TL. On each task a mentor/TL sets a **due date** for that trainee. It shows on the task card, the Deadlines card and the Reviews queue (late and due-soon are marked). It is a reminder and does not change a score.
 - **AI tools.** Each task has a default: *Ask first* (the module's rule), *Not allowed* (the Viva) or *Allowed*. A mentor/TL can set it per trainee per task. The rule that **student information is never entered into an AI tool** is shown on every task and in the Guide.
 - **Consent checklist.** Before tasks with a real student (6.3 two students, 6.4, 6.5, 7.2, 7.3, 7.5 two students) the trainee completes the module's *Pre-task safeguarding and consent checklist* in the app, once per student, using a **student code of their own choosing** (no particular format is required; the app asks for a code and says never a name). The task cannot be submitted until it is done. Admins can switch this on for any other task.
+
+## Answers, reflection and saving
+
+- **Answer boxes.** Where the doc leaves an empty cell for the trainee to write in (case-study tables, meeting observation tables, the P-T-S conversations and so on), the app shows a text box in that place. Each box is labelled from the text around it. Case Studies 01 and 02 have three boxes per scenario (issue identification; what the Student Champion should do; who else to involve and when to refer). 1.5 Part B has one box per situation; 7.1 has a box each for the conversation with the student, the teacher and the parent. Empty tables with nothing to fill in, and lines such as "Link the document here", are left out. Answer boxes are optional; the task shows how many are filled.
+- **Reflection (required).** Reflection questions written in the module text are taken out of it and asked in one **Reflection** section at the end of the task. A task with none asks "What are the key takeaways from this section?". Every reflection question must be answered before the task can be submitted, including tasks watched live (6.2, the Viva). In Curriculum, the doc panel lists how many answer boxes and reflection questions each task has, so the team can check them.
+- **Autosave.** Typing is saved by itself about 1.5 seconds after the trainee stops (the task says "Saved at 10:42"). If the connection drops, the typing is kept on that device and sent again; if the page is closed first, it is restored and saved the next time the trainee opens the task. Statuses, scores, plans, comments and checklists are saved the moment the button is pressed. The app reopens at the task the trainee was last working on (on the same device).
+- **Evidence.** "Add document link" and file uploads appear only on tasks that ask for evidence. A task with no evidence line (6.2) is submitted with the reflection only.
+- **Review comments.** Mentors, TLs, Certifying Mentors and admins can add a comment on any task, at any time; the trainee reads it on the task.
+- **Timeline (5.2).** The TL writes a free-text timeline for each trainee in the plan box; the trainee sees it on the task. The doc's own timeline is not shown.
+- **Consent checklist.** All 14 items are required. It saves by itself once the student code is entered and every item is ticked, and says how many are still to tick.
+- **Speed.** The Sheet's settings, tasks, rubrics, staff and prompts are cached for 6 hours (cleared on every change made in the app). A page load reads about 4 tabs, an autosave about 7, and opening module text reads only that section's rows. If you edit the Sheet by hand, run `clearCache` once.
+
+### Updating an existing Sheet (October 2026 team changes)
+
+After pasting the new files: choose **`applyTeamChangesOct2026`** and press **Run** (once). It adds the new tabs and columns, updates the evidence lines and names (4.2, 5.2, 6.2, 7.4 shown as RMC), removes the guidebook reference rubrics from 2.5, and leaves every trainee's progress alone. Then in the app press **Curriculum > Refresh from the doc**, so the answer boxes and reflection questions are built. Then publish a new version.
 
 ## Module text from the Google Doc
 

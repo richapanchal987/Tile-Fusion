@@ -208,7 +208,7 @@ function appConfig_() {
   const p = PROGRAMME;
   return { appName: CONFIG.APP_NAME, orgName: CONFIG.ORG_NAME, domain: CONFIG.DOMAIN, maxFiles: CONFIG.MAX_FILES_PER_TASK, taskTypes: TASK_TYPES,
     words: p.words, levels: p.levels, statusLabels: p.statusLabels, scale: p.scale, scaleHelp: p.scaleHelp, outcomes: p.outcomes, aiOptions: p.aiOptions, aiRule: p.aiRule,
-    criticalErrors: p.criticalErrors, checklist: p.checklist, evidenceLink: p.words.evidenceLink, docSections: p.docSections, storagePrefix: p.app.storagePrefix, docName: p.app.moduleDocName };
+    criticalErrors: p.criticalErrors, checklist: p.checklist, evidenceLink: p.words.evidenceLink, defaultReflection: p.defaultReflection, docSections: p.docSections, storagePrefix: p.app.storagePrefix, docName: p.app.moduleDocName };
 }
 
 function withLock_(fn) {

@@ -44,15 +44,17 @@ function auditInPage() {
   const browser = await chromium.launch(); let bad = 0;
   const open1 = async (p, sel) => { await p.locator(sel + ' > summary').first().click(); };
   const views = [
-    ['trainee home + open task', 'asha@fsksurat.in', async p => { await open1(p, '.task'); await p.locator('details.rubric > summary').first().click(); await p.locator('details[data-key=gates] summary').click(); }],
-    ['trainee: task with module text and checklist', 'chitra@fsksurat.in', async p => { await p.locator('.node[data-c="8"]').click(); await open1(p, '.task'); await p.locator('[data-act=doc]').first().click(); await p.waitForTimeout(300); }],
-    ['trainee: critical error reattempt', 'chitra@fsksurat.in', async p => { await p.locator('.node[data-c="10"]').click(); await p.locator('.task', { hasText: '7.3' }).locator('summary').first().click(); }],
+    ['trainee home + open task', 'asha@fsksurat.in', async p => { await open1(p, '.task'); await p.waitForTimeout(300); }],
+    ['trainee: answer boxes, reflection, comments', 'bina@fsksurat.in', async p => { await p.locator('.node[data-c="1"]').click(); await open1(p, '.task:has-text("Case Studies 01")'); await p.locator('.docbody textarea').first().waitFor(); await p.locator('.docbody textarea').nth(6).fill('typing'); await p.waitForSelector('.savestate:has-text("Saved at")'); }],
+    ['trainee: task with checklist', 'chitra@fsksurat.in', async p => { await p.locator('.node[data-c="8"]').click(); await open1(p, '.task'); await p.waitForTimeout(300); }],
+    ['trainee: timeline', 'bina@fsksurat.in', async p => { await p.locator('.node[data-c="7"]').click(); await open1(p, '.task:has-text("Dummy Session")'); await p.waitForTimeout(300); }],
+    ['trainee: critical error reattempt', 'chitra@fsksurat.in', async p => { await p.locator('.node[data-c="10"]').click(); await p.locator('.task', { hasText: '7.3' }).locator('summary').first().click(); await p.waitForTimeout(300); }],
     ['guide', 'asha@fsksurat.in', async p => { await p.locator('.tab', { hasText: 'Guide' }).click(); await p.locator('[data-act=doc]').first().click(); await p.waitForTimeout(300); }],
     ['review queue with rubric scoring', 'tl@fsksurat.in', async p => { await p.locator('.rvgroup, .rv').first().waitFor(); await p.locator('.rv details.rgroup summary, .rv .critrow').first().waitFor().catch(() => {}); }],
     ['team', ADMIN, async p => { await p.locator('.tab', { hasText: 'Team' }).click(); }],
     ['curriculum', ADMIN, async p => { await p.locator('.tab', { hasText: 'Curriculum' }).click(); await p.locator('[data-act=task-edit]').first().click(); }],
     ['curriculum: rubric editor', ADMIN, async p => { await p.locator('.tab', { hasText: 'Curriculum' }).click(); await p.locator('[data-act=rub-edit]').first().click(); }],
-    ['assessor view of a trainee', 'tl@fsksurat.in', async p => { await p.locator('.tab', { hasText: 'Trainee' }).click(); await open1(p, '.task'); }],
+    ['assessor view of a trainee', 'tl@fsksurat.in', async p => { await p.locator('.tab', { hasText: 'Trainee' }).click(); await p.locator('select[data-act=pick]').selectOption('bina@fsksurat.in'); await p.locator('.node[data-c="1"]').click(); await open1(p, '.task:has-text("Case Studies 01")'); await p.locator('.ans.ro').first().waitFor(); await p.locator('details.rubric > summary').first().click(); }],
     ['not enrolled', 'nobody@fsksurat.in', async () => {}],
   ];
   for (const scheme of ['light', 'dark']) for (const [name, email, prep] of views) {
