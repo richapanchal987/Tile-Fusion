@@ -4,7 +4,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 
 function makeWorld(opts) {
   opts = opts || {};
-  const state = { user: '', props: {}, files: {}, folders: {}, nextId: 1, triggers: [], doc: null };
+  const state = { user: '', props: {}, files: {}, folders: {}, nextId: 1, triggers: [], doc: null, reads: 0, cache: {} };
   const id = p => p + (state.nextId++);
 
   class Sheet {
@@ -19,7 +19,7 @@ function makeWorld(opts) {
     getRange(r, c, nr, nc) {
       const sh = this; nr = nr || 1; nc = nc || 1;
       const rng = {
-        getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => sh.get(r + i, c + j))),
+        getValues: () => (state.reads++, Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => sh.get(r + i, c + j)))),
         setValues: vals => { vals.forEach((row, i) => row.forEach((v, j) => sh.set(r + i, c + j, v))); return rng; },
         setValue: v => { sh.set(r, c, v); return rng; },
         getValue: () => sh.get(r, c),
@@ -64,22 +64,28 @@ function makeWorld(opts) {
     HtmlService: {},
     ScriptApp: { getProjectTriggers: () => state.triggers, deleteTrigger: t => { state.triggers = state.triggers.filter(x => x !== t); },
       newTrigger: fn => { const spec = { fn }; const b = { timeBased: () => b, everyDays: () => b, atHour: () => b, create: () => { state.triggers.push({ getHandlerFunction: () => fn, spec }); return spec; } }; return b; } },
-    DocumentApp: docApp(state)
+    DocumentApp: docApp(state),
+    CacheService: { getScriptCache: () => ({ get: k => (k in state.cache ? state.cache[k] : null), put: (k, v) => { if (String(v).length > 100000) throw new Error('too big'); state.cache[k] = String(v); }, remove: k => { delete state.cache[k]; } }) }
   };
   Object.assign(sandbox.Session, { getEffectiveUser: () => ({ getEmail: () => 'richa.panchal@fsksurat.in' }) });
   const ctx = vm.createContext(sandbox);
   const dir = path.join(__dirname, '..', 'apps-script');
   const files = ['Config.gs', 'Logic.gs', 'SeedData.gs', 'SeedRubrics.gs'].concat(fs.readdirSync(dir).filter(f => /^SeedRubrics\d+\.gs$/.test(f)).sort(),
-    ['Code.gs', 'Actions.gs', 'Admin.gs', 'DocSync.gs']);
+    ['Code.gs', 'Store.gs', 'Actions.gs', 'Work.gs', 'Admin.gs', 'DocSync.gs', 'Migrate.gs']);
   if (opts.reverse) files.reverse();   // proves the app does not depend on the order files are pasted into the editor
   const src = files.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   const names = ['setup', 'getBootstrap', 'getActivityLog', 'saveMyTask', 'saveChecklist', 'uploadEvidence', 'removeEvidence', 'getEvidenceFile', 'assessTask', 'setTaskPlan',
     'grantReattempt', 'confirmCertification', 'enrolTrainee', 'updateTrainee', 'saveStaff', 'removeStaff', 'saveTopic', 'saveTask', 'setTaskActive', 'saveRubric',
-    'saveResources', 'saveSettings', 'refreshModuleText', 'refreshModuleTextNightly', 'getContent', 'PROGRAMME', 'docBlocksToSections_', 'docKey_'];
-  const api = vm.runInContext(src + `;({${names.join(',')}, SHEETS})`, ctx);
+    'saveResources', 'saveSettings', 'refreshModuleText', 'refreshModuleTextNightly', 'getContent', 'PROGRAMME', 'docBlocksToSections_', 'docKey_',
+    'autosaveTask', 'getTaskWork', 'addComment', 'applyTeamChangesOct2026', 'clearCache'];
+  const raw = vm.runInContext(src + `;({${names.join(',')}, SHEETS})`, ctx);
+  // Every call from the page is a new request in Apps Script, so the per-request memo starts empty each time.
+  const api = {};
+  Object.keys(raw).forEach(n => { api[n] = typeof raw[n] === 'function' ? (...a) => { vm.runInContext('MEMO_ = {}', ctx); return raw[n](...a); } : raw[n]; });
   const plain = x => JSON.parse(JSON.stringify(x === undefined ? null : x));
   return { state, sheets, api, as(email) { state.user = email; },
-    call(fn, args) { return plain(api[fn](...(args || []))); } };
+    call(fn, args) { vm.runInContext('MEMO_ = {}', ctx); return plain(api[fn](...(args || []))); },
+    newRequest() { vm.runInContext('MEMO_ = {}', ctx); } };
 }
 
 // A tiny stand-in for DocumentApp. A doc is built from plain blocks (the same shape DocSync.gs works with),

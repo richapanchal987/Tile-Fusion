@@ -13,8 +13,6 @@ const SEED_RUBRIC_GROUPS = [
   "Scenario 5: A student approaches the Student Champion expressing distress, saying, “I can’t handle academics anymore. I feel like I’m drowning.” The student appears visibly overwhelmed, possibly fatigued, and emotionally strained. There may be multiple contributing factors such as academic pressure, time mismanagement, high expectations, or personal stressors. The intensity of the statement indicates a risk of disengagement if not addressed promptly, and the student may be struggling to cope with current demands without adequate support or strategies.",
   "MYP OVERVIEW",
   "DP OVERVIEW",
-  "CAS TRAINING",
-  "Parent Guidebook (reference only)",
-  "Student Guidebook (reference only)"
+  "CAS TRAINING"
 ];
 const SEED_RUBRIC_PARTS = () => [SEED_RUBRICS_1, SEED_RUBRICS_2, SEED_RUBRICS_3];

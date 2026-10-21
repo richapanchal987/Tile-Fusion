@@ -53,4 +53,70 @@ t('long sections are cut into pieces that each fit one Sheet cell, and a huge ta
   assert.strictEqual((all.match(/<table>/g) || []).length, (all.match(/<\/table>/g) || []).length);
 });
 
+/* ---------- the team's changes (October 2026): answer boxes, reflection, removed lines ---------- */
+const cell = text => text ? [p(text)] : [];
+const table = rows => ({ t: 'table', rows: rows.map(r => r.map(cell)) });
+const tasks = { [D.docKey_('Case')]: true, [D.docKey_('Talk')]: true, [D.docKey_('Rules')]: true };
+const conv = (blocks, rules) => D.docBlocksToSections_(blocks, rules || {}, tasks);
+const boxes = html => (html.match(/class="ansbox"/g) || []).length;
+
+t('empty response cells in a task become answer boxes labelled by the cells around them; not in sections that are not tasks', () => {
+  const tb = table([['Situation', 'What you would do'], ['Late to class', ''], ['Upset after a test', '']]);
+  const [a] = conv([title('Talk'), tb]), [b] = conv([title('Notes'), tb]);
+  assert.strictEqual(a.answers.map(x => x.label).join('|'), 'Late to class — What you would do|Upset after a test — What you would do');
+  assert.strictEqual(boxes(a.parts.join('')), 2); assert.strictEqual(b.answers.length, 0); assert.strictEqual(boxes(b.parts.join('')), 0);
+});
+t('a one-column case table: each box is labelled with its scenario and the question above it; extra boxes follow "issue identification"', () => {
+  const rules = { addAnswersAfter: [{ sections: ['Case'], match: 'issue identification', add: ['What should the Student Champion do?', 'Who else would you involve?'] }] };
+  const [s] = conv([title('Case'), table([['Scenario 1: A student stops eating lunch.'], ['Issue identification'], ['']])], rules);
+  assert.strictEqual(s.answers.map(x => x.label).join('|'), 'Scenario 1 — Issue identification|Scenario 1 — What should the Student Champion do?|Scenario 1 — Who else would you involve?');
+});
+t('the same doc gives the same answer keys every time, so typed answers stay attached after a refresh', () => {
+  const doc = () => [title('Talk'), table([['Q', 'A'], ['One', ''], ['Two', '']]), table([['Q', 'A'], ['One', '']])];
+  const k1 = conv(doc())[0].answers.map(x => x.key), k2 = conv(doc())[0].answers.map(x => x.key);
+  assert.strictEqual(k1.join(), k2.join()); assert.strictEqual(new Set(k1).size, k1.length, 'keys are unique within a section');
+  k1.forEach(k => assert.match(k, /^a-[a-z0-9-]{1,40}$/));
+});
+t('empty tables and named tables are removed; a one-cell box becomes a centred heading; a table can be reduced to its instructions', () => {
+  const rules = { dropTables: { Talk: ['Name:'] }, tablesToInstructions: ['Rules'] };
+  const [s] = conv([title('Talk'), table([['', ''], ['', '']]), table([['Name:', ''], ['Date:', '']]), table([['BOOK 1']]), p('after')], rules);
+  const h = s.parts.join(''); assert.ok(!h.includes('<table') && !h.includes('Name:')); assert.ok(/BOOK 1/.test(h) && h.includes('after')); assert.strictEqual(s.answers.length, 0);
+  const long = 'Observe two classes and note how the teacher builds routines, checks understanding and responds to students who need support.';
+  const [r] = conv([title('Rules'), { t: 'table', rows: [[[p(long)], [p('Date')]], [[], []]] }], rules);
+  assert.ok(r.parts.join('').includes(long) && !r.parts.join('').includes('<table') && !r.parts.join('').includes('Date'));
+});
+t('"link the document here" lines are removed; other text is kept', () => {
+  const rules = { dropParagraphs: ['^(link|add|attach|paste|upload|insert)\\b[^.]{0,40}\\bhere\\b\\s*:?\\s*$'] };
+  const [s] = conv([title('Talk'), p('Link the document here'), p('Add your notes here:'), p('Add a summary of what the parent said, then agree a next step here and with the TL.')], rules);
+  const h = s.parts.join(''); assert.ok(!/document here|notes here/.test(h)); assert.ok(h.includes('agree a next step'));
+});
+t('a part of the doc can be cut out (the timeline in the dummy session)', () => {
+  const rules = { cut: [{ section: 'Talk', from: 'TIMELINE', to: 'Reflection Questions', exact: true }] };
+  const [s] = conv([title('Talk'), p('Plan'), p('TIMELINE', 'h2'), p('Week 1: topic'), p('Reflection Questions', 'h2'), li('What went well?')], rules);
+  const h = s.parts.join(''); assert.ok(!h.includes('Week 1') && h.includes('Plan') && h.includes('Reflection Questions'));
+});
+t('reflection questions move out of the text into the Reflection section, grouped, with "Case {n}" for repeated blocks', () => {
+  const rules = { reflection: [{ section: 'Talk', from: 'Professional Reflection', to: 'Expected Submission', every: true, label: 'Case {n}' }] };
+  const [s] = conv([title('Talk'), p('Case 1 text'), p('Professional Reflection', 'h3'), li('What worked?'), li('What would you change?'), p('Expected Submission'),
+    p('Case 2 text'), p('Professional Reflection', 'h3'), li('What worked?'), p('Expected Submission')], rules);
+  assert.strictEqual(s.reflection.map(x => x.group + ': ' + x.label).join('|'), 'Case 1: What worked?|Case 1: What would you change?|Case 2: What worked?');
+  assert.strictEqual(new Set(s.reflection.map(x => x.key)).size, 3); s.reflection.forEach(x => assert.match(x.key, /^r-/));
+  const h = s.parts.join(''); assert.ok(!h.includes('What worked') && !h.includes('Professional Reflection') && h.includes('Case 2 text') && h.includes('Expected Submission'));
+});
+t('a one-line reflection prompt is split into separate questions', () => {
+  const rules = { reflection: [{ section: 'Talk', from: 'Reflection:', single: true, split: '→' }] };
+  const [s] = conv([title('Talk'), p('Reflection: What did you notice? → What will you do next?'), p('kept')], rules);
+  assert.strictEqual(s.reflection.map(x => x.label).join('|'), 'What did you notice?|What will you do next?'); assert.ok(!s.parts.join('').includes('notice'));
+});
+t('a list of situations gets one answer box each, with a hint; boxes can also be added at the end of a task', () => {
+  const rules = { listAnswers: [{ section: 'Rules', from: 'Situations', to: 'What to submit', hint: 'Classification and one line' }], appendAnswers: { Rules: [['Conversation with the student', 'Summary and notes']] } };
+  const [s] = conv([title('Rules'), p('Situations'), li('A parent asks for a report'), li('A teacher shares a worry'), p('What to submit')], rules);
+  assert.strictEqual(s.answers.map(x => x.label).join('|'), '1. A parent asks for a report|2. A teacher shares a worry|Conversation with the student');
+  const h = s.parts.join(''); assert.strictEqual(boxes(h), 3); assert.ok(h.includes('data-h="Classification and one line"') && h.includes('data-h="Summary and notes"'));
+});
+t('answer box labels and hints from the doc are escaped', () => {
+  const [s] = conv([title('Talk'), table([['<b onmouseover=x>"Q"</b>', 'A'], ['One', '']])]);
+  const h = s.parts.join(''); assert.ok(!h.includes('<b onmouseover') && !/data-l="[^"]*"Q/.test(h));
+});
+
 console.log('\n' + n + ' tests passed');

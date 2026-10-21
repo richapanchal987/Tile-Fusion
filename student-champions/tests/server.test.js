@@ -10,11 +10,12 @@ const me = (email, fn) => { const was = W.state.user; W.as(email); try { return 
 const tr = (b, email) => b.trainees.find(x => x.id === email);
 const crit = (b, id, score) => { const o = {}; b.rubrics.filter(r => r.task === id && r.use === 'score').forEach(r => { o[r.order] = score; }); return o; };
 const tick = () => Array(P.checklist.groups.reduce((a, g) => a + g[1].length, 0)).fill(true);
+const reflect = (id, text) => W.call('autosaveTask', [id, { r: { 'r-default': text || 'My key takeaway from this section.' } }]);   // as the signed-in trainee
 const assess = (email, id, score, fb) => W.call('assessTask', [email, id, { criteria: crit(boot(), id, score), feedback: fb || 'Well done.' }]);
 
 t('setup fills every tab from the seed, creates the private evidence folder and the nightly refresh', () => {
   assert.strictEqual(W.sheets.Tasks.getLastRow(), 33); assert.strictEqual(W.sheets.Topics.getLastRow(), 9); assert.strictEqual(W.sheets.Phases.getLastRow(), 5);
-  assert.strictEqual(W.sheets.Rubrics.getLastRow(), 272);   // 271 criteria and the header
+  assert.strictEqual(W.sheets.Rubrics.getLastRow(), 248);   // 247 criteria and the header
   assert.strictEqual(W.sheets.Staff.get(2, 1), ADMIN); assert.strictEqual(W.sheets.Staff.get(2, 4), 'No'); assert.ok(W.state.props.EVIDENCE_FOLDER_ID);
   assert.strictEqual(W.state.triggers.length, 1); assert.strictEqual(W.state.triggers[0].getHandlerFunction(), 'refreshModuleTextNightly');
   W.api.setup(); assert.strictEqual(W.sheets.Tasks.getLastRow(), 33, 'setup is idempotent'); assert.strictEqual(W.state.triggers.length, 1, 'one trigger only');
@@ -63,7 +64,9 @@ t('trainee: draft, evidence, upload, submit', () => {
   W.as('asha@fsksurat.in');
   let b = W.call('saveMyTask', ['1.2', 'save', 'note', 'my reflection']);
   assert.strictEqual(tr(b, 'asha@fsksurat.in').p['1.2'].status, 'progress');
-  throwsMsg(() => W.api.saveMyTask('1.3', 'submit', '', ''), /evidence/);
+  throwsMsg(() => W.api.saveMyTask('1.3', 'submit', '', ''), /Answer every reflection question/);
+  reflect('1.3'); reflect('1.2');
+  throwsMsg(() => W.api.saveMyTask('1.3', 'submit', '', ''), /document link or a file, or type your answers/);
   b = W.call('uploadEvidence', ['1.3', 'casebook.pdf', 'application/pdf', Buffer.from('%PDF-1 hello').toString('base64')]);
   assert.strictEqual(tr(b, 'asha@fsksurat.in').p['1.3'].files[0].name, 'casebook.pdf');
   throwsMsg(() => W.api.uploadEvidence('1.3', 'bad.exe', 'x', 'AAAA'), /not allowed/);
@@ -94,6 +97,7 @@ t('a trainee cannot see another trainee, assess, plan, certify or edit the modul
 
 t('real-student tasks: the consent checklist comes first, uses a student code, and one is needed per student', () => {
   W.as('asha@fsksurat.in');
+  reflect('6.3');
   throwsMsg(() => W.api.saveMyTask('6.3', 'submit', 'notes', ''), /consent checklist for 2 students/);
   throwsMsg(() => W.api.saveChecklist('6.3', '', tick()), /Enter the student code/);
   throwsMsg(() => W.api.saveChecklist('6.3', 'x'.repeat(41), tick()), /short/);
@@ -147,7 +151,7 @@ t('critical error: the task becomes not yet met with score 1, is flagged for the
 
 t('reattempts: one after a miss; after that the trainee is blocked until an admin allows another', () => {
   W.as('asha@fsksurat.in');
-  W.call('saveMyTask', ['1.5', 'submit', 'v2', '']);                     // second try (first was Developing)
+  reflect('1.5'); W.call('saveMyTask', ['1.5', 'submit', 'v2', '']);                     // second try (first was Developing)
   W.as('mentor@fsksurat.in'); let b = W.call('assessTask', ['asha@fsksurat.in', '1.5', { criteria: crit(boot(), '1.5', 2), feedback: 'Still thin on confidentiality.' }]);
   assert.strictEqual(tr(b, 'asha@fsksurat.in').p['1.5'].failed, 2);
   W.as('asha@fsksurat.in'); throwsMsg(() => W.api.saveMyTask('1.5', 'submit', 'v3', ''), /used the reattempts/);
@@ -208,26 +212,22 @@ t('module editing: modules, tasks, resources and settings validate their input',
   throwsMsg(() => W.api.saveResources(1, '', [{ label: 'x', url: 'ftp://x' }]), /http/);
   assert.strictEqual(W.call('saveResources', [1, '', [{ label: 'SOP', url: 'https://x.example/sop', note: '' }]]).res.length, 1);
 });
-t('competency standard: hidden from trainees (text and rubric rows built from it), shown to mentors, TLs and admins; scoring still works', () => {
-  const std = boot().tasks.find(x => x.id === '2.1').standard; assert.ok(std.length > 20);
+t('staff-only: a trainee never receives the rubric, the competency standard, critical gates, per-criterion scores or the full RMC name', () => {
+  const staffView = boot(), std = staffView.tasks.find(x => x.id === '2.1').standard;
+  assert.ok(std.length > 20 && staffView.rubrics.length > 200 && staffView.tasks.some(x => x.gate));
+  assert.strictEqual(staffView.tasks.find(x => x.id === '7.4').name, 'Referral Mapping Cases (RMC)');
   me('asha@fsksurat.in', () => {
-    const b = boot(); assert.ok(b.tasks.every(x => x.standard === ''));
-    assert.strictEqual(b.rubrics.filter(r => r.task === '2.1').length, 0, 'plain criteria built from the standard are not sent to a trainee');
-    assert.ok(b.rubrics.filter(r => r.task === '1.1').length === 14, 'rubrics from the workbook tabs are');
-    assert.ok(!JSON.stringify(b).includes(std));
+    const b = boot(), a = tr(b, 'asha@fsksurat.in');
+    assert.strictEqual(b.rubrics.length, 0, 'no rubric');
+    assert.ok(b.tasks.every(x => x.standard === '' && x.gate === false), 'no standard, no gate flag');
+    assert.strictEqual(b.tasks.find(x => x.id === '7.4').name, 'RMC', 'the trainee sees only RMC');
+    assert.ok(!JSON.stringify(b).includes('Referral Mapping Cases (RMC)') && !JSON.stringify(b).includes(std));
+    assert.strictEqual(a.stats.gatesTotal, 0); assert.strictEqual(a.stats.gates.length, 0);
+    assert.ok(!a.stats.blockers.some(x => /Critical gate/.test(x)));
+    assert.ok(Object.values(a.p).every(p => Object.keys(p.criteria).length === 0), 'no per-criterion scores');
   });
-  ['mentor@fsksurat.in', 'tl@fsksurat.in', ADMIN].forEach(e => me(e, () => { const b = boot(); assert.strictEqual(b.tasks.find(x => x.id === '2.1').standard, std); assert.ok(b.rubrics.filter(r => r.task === '2.1').length >= 2); }));
-  me('mentor@fsksurat.in', () => W.call('assessTask', ['bina@fsksurat.in', '2.1', { criteria: crit(boot(), '2.1', 3), feedback: '' }]));
-  assert.strictEqual(tr(boot(), 'bina@fsksurat.in').p['2.1'].score, 3);
-});
-t('rubric editing: an admin can choose which criteria a trainee sees; the choice is kept', () => {
-  const rows = boot().rubrics.filter(r => r.task === '2.3').map(r => Object.assign({}, r, { show: true }));
-  W.call('saveRubric', ['2.3', rows]);
-  me('asha@fsksurat.in', () => assert.strictEqual(boot().rubrics.filter(r => r.task === '2.3').length, rows.length));
-  W.call('saveRubric', ['2.3', rows.map((r, i) => Object.assign({}, r, { show: i !== 0 }))]);
-  me('asha@fsksurat.in', () => assert.strictEqual(boot().rubrics.filter(r => r.task === '2.3').length, rows.length - 1));
-  assert.strictEqual(boot().rubrics.find(r => r.task === '2.3' && r.order === 1).show, false);
-  assert.strictEqual(W.sheets.Rubrics.get(1, 11), 'Shown to trainee');
+  me('bina@fsksurat.in', () => { const s2 = tr(boot(), 'bina@fsksurat.in').stats; assert.ok(!s2.blockers.some(x => /Critical gate/.test(x)) && s2.blockers[0] === 'Some required tasks are not yet signed off by your mentor or TL.'); });
+  ['mentor@fsksurat.in', 'tl@fsksurat.in', ADMIN].forEach(e => me(e, () => { const b = boot(); assert.strictEqual(b.tasks.find(x => x.id === '2.1').standard, std); assert.ok(tr(b, 'asha@fsksurat.in').stats.gatesTotal === 15); assert.ok(tr(b, 'bina@fsksurat.in').stats.blockers.some(x => /Critical gate 1\.1/.test(x))); }));
 });
 t('rubric editing: an admin can change criteria and levels; at least one scored criterion must remain; reference rows are never scored', () => {
   const rows = boot().rubrics.filter(r => r.task === '3.1');
@@ -308,9 +308,94 @@ t('module text: the nightly trigger refreshes without a signed-in user and logs 
   assert.strictEqual(W.call('getContent', ['Introduction']).found, true);
 });
 
+// ----- typed answers, reflection, autosave, comments, timeline -----
+const PTS = () => ({ blocks: [
+  { t: 'p', h: 'title', runs: [{ text: 'P-T-S' }] }, { t: 'p', runs: [{ text: 'Case: Student concern about a teacher.' }] },
+  { t: 'table', rows: [[[{ t: 'p', runs: [{ text: 'What did KA say first?' }] }]], [[]]] },
+  { t: 'p', runs: [{ text: 'Link your document here:', b: true }] },
+  { t: 'p', h: 'h2', runs: [{ text: 'Reflection After All Three Role Plays', b: true }] }, { t: 'p', runs: [{ text: 'After completing the three conversations, reflect on:' }] },
+  { t: 'li', runs: [{ text: 'How did my communication change?' }] }, { t: 'li', runs: [{ text: 'What should I have kept confidential?' }] },
+  { t: 'p', h: 'title', runs: [{ text: 'Introduction' }] }, { t: 'p', runs: [{ text: 'Intro text' }] }] });
+t('module text: response cells become answer boxes, reflection questions move to the Reflection section, "link here" lines go', () => {
+  W.as(ADMIN); W.state.doc = PTS(); W.call('refreshModuleText', []);
+  const html = W.call('getContent', ['P-T-S']).html;
+  assert.ok(!/Link your document here/.test(html) && !/How did my communication change/.test(html), 'link line and reflection questions are not in the module text');
+  assert.strictEqual((html.match(/class="ansbox"/g) || []).length, 4, 'one box from the table, three for the three conversations');
+  assert.ok(/data-l="Conversation with the teacher"/.test(html) && /data-h="Summary and notes"/.test(html));
+  const intro = W.call('getContent', ['Introduction']).html; assert.ok(!/ansbox/.test(intro), 'only task sections get answer boxes');
+  const w = me('bina@fsksurat.in', () => W.call('getTaskWork', ['bina@fsksurat.in', '7.1']));
+  assert.strictEqual(w.answers.length, 4); assert.deepStrictEqual(w.reflection.map(x => x.label), ['How did my communication change?', 'What should I have kept confidential?']);
+  assert.strictEqual(boot().sync.tasks.find(x => x.id === '7.1').reflection, 2);
+  assert.strictEqual(boot().tasks.find(x => x.id === '7.1').refl.length, 2); assert.strictEqual(boot().tasks.find(x => x.id === '7.4').refl[0].label, P.defaultReflection, 'a task with no questions in its text gets the standard question');
+});
+t('autosave: typed answers and reflection are kept as the trainee types, counted, and survive a reload', () => {
+  W.as('bina@fsksurat.in');
+  const w = W.call('getTaskWork', ['bina@fsksurat.in', '7.1']), a0 = w.answers[0].key, r0 = w.reflection[0].key, r1 = w.reflection[1].key;
+  let out = W.call('autosaveTask', ['7.1', { a: { [a0]: 'KA said the teacher scolds them.' }, r: { [r0]: 'I slowed down with the teacher.' }, evidence: '' }]);
+  assert.strictEqual(out.answered, 1); assert.strictEqual(out.reflected, 1); assert.strictEqual(out.status, 'progress');
+  out = W.call('autosaveTask', ['7.1', { a: { 'bad key!': 'x', [a0]: 'KA said the teacher scolds them in front of the class.' } }]);
+  const again = W.call('getTaskWork', ['bina@fsksurat.in', '7.1']);
+  assert.strictEqual(again.a[a0], 'KA said the teacher scolds them in front of the class.'); assert.strictEqual(again.r[r0], 'I slowed down with the teacher.');
+  assert.ok(!('bad key!' in again.a), 'unknown keys are ignored');
+  assert.strictEqual(tr(boot(), 'bina@fsksurat.in').p['7.1'].answered, 1, 'the count is on the task for the Team view');
+  throwsMsg(() => W.api.saveMyTask('7.1', 'submit', ''), /Answer every reflection question before you submit \(1 still empty\)/);
+  W.call('autosaveTask', ['7.1', { r: { [r1]: 'Whether the teacher was named.' } }]);
+  const b = W.call('saveMyTask', ['7.1', 'submit', '']);
+  assert.strictEqual(tr(b, 'bina@fsksurat.in').p['7.1'].status, 'submitted', 'typed answers count as the evidence; no link needed');
+  throwsMsg(() => W.api.autosaveTask('7.1', { a: { [a0]: 'changed after submitting' } }), /already been submitted/);
+  throwsMsg(() => W.api.autosaveTask('7.4', { a: { 'a-x': 'y'.repeat(6000) }, r: Object.fromEntries(Array.from({ length: 9 }, (_, i) => ['r-' + i, 'z'.repeat(6000)])) }), /too long to save/);
+  W.as(ADMIN);
+});
+t('answers: the trainee, their mentors and admins can read them; other trainees and unassigned mentors cannot; a trainee cannot save for someone else', () => {
+  throwsMsg(() => me('asha@fsksurat.in', () => W.api.autosaveTask('7.4', { r: { 'r-default': 'late' } })), /already been submitted or completed/);
+  me('mentor@fsksurat.in', () => assert.deepStrictEqual(Object.keys(W.call('getTaskWork', ['asha@fsksurat.in', '7.4']).r).length, 0));
+  me(ADMIN, () => W.call('getTaskWork', ['asha@fsksurat.in', '7.4']));
+  me('other@fsksurat.in', () => throwsMsg(() => W.api.getTaskWork('asha@fsksurat.in', '7.4'), /do not have access/));
+  me('bina@fsksurat.in', () => throwsMsg(() => W.api.getTaskWork('asha@fsksurat.in', '7.4'), /do not have access/));
+  me('mentor@fsksurat.in', () => throwsMsg(() => W.api.autosaveTask('7.4', { r: { 'r-default': 'x' } }), /Only trainees/));
+});
+t('review comments: mentors, TLs and admins add them on any task; the trainee reads them but cannot add', () => {
+  me('tl@fsksurat.in', () => W.call('addComment', ['bina@fsksurat.in', '7.1', 'Good summary of the teacher conversation. Add what you would say next.']));
+  throwsMsg(() => me('tl@fsksurat.in', () => W.api.addComment('bina@fsksurat.in', '7.1', '   ')), /Write a comment/);
+  me('bina@fsksurat.in', () => {
+    const c = tr(boot(), 'bina@fsksurat.in').comments; assert.strictEqual(c.length, 1); assert.strictEqual(c[0].name, 'Team Leader'); assert.strictEqual(c[0].task, '7.1');
+    throwsMsg(() => W.api.addComment('bina@fsksurat.in', '7.1', 'me too'), /mentors, TLs and admins/);
+  });
+  me('other@fsksurat.in', () => W.call('addComment', ['bina@fsksurat.in', '6.1', 'Seen live: calm and clear.']));    // an experienced SC added as a mentor
+});
+t('timeline: the TL writes a timeline for one trainee on the dummy session; the trainee sees it', () => {
+  assert.strictEqual(boot().tasks.find(x => x.id === '5.2').timeline, true);
+  me('tl@fsksurat.in', () => W.call('setTaskPlan', ['bina@fsksurat.in', '5.2', '', '', 'Topic: 3 Nov\nPlan: 10 Nov\nPitch: 14 Nov']));
+  me('bina@fsksurat.in', () => assert.strictEqual(tr(boot(), 'bina@fsksurat.in').p['5.2'].timeline, 'Topic: 3 Nov\nPlan: 10 Nov\nPitch: 14 Nov'));
+});
+t('speed: a warm page load and an autosave read only a few tabs; module text reads only its own rows', () => {
+  W.as('bina@fsksurat.in'); W.call('getBootstrap', []);
+  let n = W.state.reads; W.call('getBootstrap', []); const load = W.state.reads - n;
+  n = W.state.reads; W.call('autosaveTask', ['7.4', { r: { 'r-default': 'still typing' } }]); const save = W.state.reads - n;
+  n = W.state.reads; W.call('getContent', ['P-T-S']); const text = W.state.reads - n;
+  console.log('     (sheet reads: page load ' + load + ', autosave ' + save + ', module text ' + text + ')');
+  assert.ok(load <= 6, 'page load reads ' + load); assert.ok(save <= 10, 'autosave reads ' + save); assert.ok(text <= 5, 'module text reads ' + text);
+  W.as(ADMIN);
+});
+t('update for an existing Sheet: the team changes are applied once, safely, and nothing else is touched', () => {
+  const X = makeWorld(); X.as(ADMIN); X.api.setup();
+  const base = X.call('getBootstrap').tasks.find(t => t.id === '4.2');
+  X.call('saveTask', [Object.assign({}, base, { name: 'Observe MYP classes', evidence: 'old generic line', traineeName: '', timeline: false }), false]);
+  X.call('saveRubric', ['2.5', X.call('getBootstrap').rubrics.filter(r => r.task === '2.5').map(r => Object.assign({}, r, { group: '' })).concat([{ criterion: 'Parent guidebook criterion', use: 'reference' }])]);
+  X.sheets.Rubrics.set(1, 11, 'Shown to trainee');
+  X.api.applyTeamChangesOct2026();
+  const t = X.call('getBootstrap').tasks;
+  assert.strictEqual(t.find(x => x.id === '4.2').name, 'Observe BTec and MYP Classes'); assert.strictEqual(t.find(x => x.id === '4.2').evidence, 'Observation records – BTec and MYP');
+  assert.strictEqual(t.find(x => x.id === '6.2').evidence, ''); assert.strictEqual(t.find(x => x.id === '7.4').traineeName, 'RMC'); assert.strictEqual(t.find(x => x.id === '5.2').timeline, true);
+  assert.strictEqual(X.call('getBootstrap').rubrics.filter(r => r.task === '2.5' && r.use === 'reference').length, 0); assert.strictEqual(X.sheets.Rubrics.get(1, 11), '');
+  ['Prompts', 'Answers', 'Comments'].forEach(n => assert.ok(X.sheets[n], n + ' tab created'));
+  const rowsBefore = X.sheets.Tasks.getLastRow(); X.api.applyTeamChangesOct2026(); assert.strictEqual(X.sheets.Tasks.getLastRow(), rowsBefore, 'running it again changes nothing');
+  X.as('x@fsksurat.in'); throwsMsg(() => X.api.applyTeamChangesOct2026(), /Only an admin/);
+});
+
 t('the activity log is for admins only and records submissions, assessments, plans and certification', () => {
   const log = W.call('getActivityLog', []); const actions = new Set(log.map(l => l.action));
-  ['Submitted', 'Assessed', 'Critical error', 'Task plan', 'Extra reattempt', 'Consent checklist', 'Certification', 'Enrolled trainee', 'Saved rubric', 'Refreshed module text'].forEach(a => assert.ok(actions.has(a), a));
+  ['Submitted', 'Assessed', 'Critical error', 'Task plan', 'Extra reattempt', 'Consent checklist', 'Certification', 'Enrolled trainee', 'Saved rubric', 'Refreshed module text', 'Comment'].forEach(a => assert.ok(actions.has(a), a));
   W.as('tl@fsksurat.in'); throwsMsg(() => W.api.getActivityLog(), /admin/); W.as(ADMIN);
 });
 t('typed text starting with = is stored as text, not a formula (cell format is plain text)', () => {

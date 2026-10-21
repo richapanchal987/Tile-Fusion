@@ -151,6 +151,40 @@ function moduleShare_(p) {
 const aiOf_ = (task, p) => (p && AI_KEYS.indexOf(p.ai) > -1) ? p.ai : (AI_KEYS.indexOf(task.ai) > -1 ? task.ai : 'ask');
 const failedAllowed_ = (settings, p) => 1 + settings.reattempts + (p.extra || 0);
 
+/* ---------------- Typed answers and reflection ---------------- */
+
+/** The answer boxes and reflection questions of a task, from its section of the module text (the Prompts tab). */
+function promptsFor_(db, task) {
+  const key = task.doc ? docKey_(task.doc) : '', rows = (db.prompts || []).filter(x => key && x.section === key).sort((a, b) => a.order - b.order);
+  const reflection = rows.filter(x => x.kind === 'r').map(x => ({ key: x.key, label: x.label, group: x.group }));
+  return {
+    answers: rows.filter(x => x.kind === 'a').map(x => ({ key: x.key, label: x.label })),
+    reflection: reflection.length ? reflection : [{ key: 'r-default', label: PROGRAMME.defaultReflection, group: '' }]
+  };
+}
+const filled_ = (map, list) => list.filter(q => String((map || {})[q.key] || '').trim()).length;
+
+/**
+ * Whether a task can be submitted. Reflection is required; answer boxes are not (the mentor judges completeness).
+ * Where the task asks for evidence, a document link, a file or at least one typed answer will do.
+ */
+function submitProblem_(task, prompts, work, p) {
+  const left = prompts.reflection.length - filled_(work.r, prompts.reflection);
+  if (left > 0) return 'Answer every reflection question before you submit (' + left + ' still empty).';
+  if (String(task.evidence || '').trim() && !p.evidence && !(p.files || []).length && !filled_(work.a, prompts.answers)) {
+    return 'Add a document link or a file, or type your answers, before you submit.';
+  }
+  return '';
+}
+
+/** What a trainee sees of their own statistics: critical gates are for mentors, TLs and admins only. */
+function statsForTraineeView_(s) {
+  const out = Object.assign({}, s, { gates: [], gatesPassed: 0, gatesTotal: 0 });
+  const gateLines = s.blockers.filter(b => /^Critical gate /.test(b));
+  out.blockers = (gateLines.length ? ['Some required tasks are not yet signed off by your mentor or TL.'] : []).concat(s.blockers.filter(b => !/^Critical gate /.test(b)));
+  return out;
+}
+
 /* ---------------- Per-trainee statistics ---------------- */
 
 function computeStats_(tr, ctx) {
@@ -262,41 +296,51 @@ function buildBootstrap_(db, me, todayIso, appConfig) {
   const byTrainee = {}, listsBy = {};
   db.progress.forEach(r => { (byTrainee[r.trainee] = byTrainee[r.trainee] || []).push(r); });
   db.checklists.forEach(r => { (listsBy[r.trainee] = listsBy[r.trainee] || []).push(r); });
+  const commentsBy = {};
+  (db.comments || []).forEach(r => { (commentsBy[r.trainee] = commentsBy[r.trainee] || []).push(r); });
 
   const trainees = db.trainees.filter(tr => visibleTo_(me, tr)).map(tr => {
     const p = {};
     (byTrainee[tr.email] || []).forEach(r => {
       p[r.task] = { status: r.status, evidence: r.evidence, files: r.files, reflection: r.reflection, score: r.score,
                     feedback: r.feedback, assessor: r.assessor, date: r.date, submitted: r.submitted, updated: r.updated,
-                    criteria: r.criteria, critical: r.critical, failed: r.failed, extra: r.extra, due: r.due, ai: r.ai };
+                    criteria: staff ? r.criteria : {}, critical: r.critical, failed: r.failed, extra: r.extra, due: r.due, ai: r.ai,
+                    timeline: r.timeline, answered: r.answered, reflected: r.reflected };
     });
     const t = { id: tr.email, name: tr.name, start: tr.start, end: addMonths_(tr.start, s.programmeMonths), active: tr.active,
                 assessors: tr.assessors, tl: tr.tl, certifier: tr.certifier,
                 assessorNames: tr.assessors.map(e => names[e] || e), tlName: tr.tl ? (names[tr.tl] || tr.tl) : '', certifierName: tr.certifier ? (names[tr.certifier] || tr.certifier) : '',
                 confirmedBy: tr.confirmedBy, confirmedAt: tr.confirmedAt, confirmNote: tr.confirmNote, p: p,
-                lists: (listsBy[tr.email] || []).map(c => ({ task: c.task, code: c.code, at: c.at })) };
+                lists: (listsBy[tr.email] || []).map(c => ({ task: c.task, code: c.code, at: c.at })),
+                comments: (commentsBy[tr.email] || []).map(c => ({ task: c.task, at: c.at, name: c.name, text: c.text })) };
     const cal = buildCalendar_(tr.start, s.cycles, s.daysPerCycle);
     t.cal = cal;
     t.stats = computeStats_(Object.assign({}, tr, { p: p, checklists: listsBy[tr.email] || [] }),
       { tasks: activeTasks, topics: db.topics, eff: eff, settings: s, cal: cal, todayIso: todayIso });
+    if (!staff) t.stats = statsForTraineeView_(t.stats);
     return t;
   });
 
   // A long group text (a case-study scenario) is repeated on every row of its group, so send each text once and refer to it by number.
   const rubricGroups = { list: [], rows: [] };
-  db.rubrics.filter(r => staff || r.show).forEach(r => {      // a trainee never receives rows hidden from them
+  (staff ? db.rubrics : []).forEach(r => {      // how a task is assessed is for mentors, TLs and admins only
     let g = rubricGroups.list.indexOf(r.group);
     if (g < 0) { rubricGroups.list.push(r.group); g = rubricGroups.list.length - 1; }
-    rubricGroups.rows.push({ task: r.task, order: r.order, use: r.use, show: r.show, g: g, criterion: r.criterion, evaluated: r.evaluated, levels: r.levels });
+    rubricGroups.rows.push({ task: r.task, order: r.order, use: r.use, g: g, criterion: r.criterion, evaluated: r.evaluated, levels: r.levels });
   });
   const out = {
     me: me, config: config,
     topics: db.topics.map(t => ({ id: t.id, name: t.name, w: t.weight, phase: t.phase, need: t.threshold, doc: t.doc, note: staff ? t.note : '' })),
-    tasks: (staff ? allTasks : activeTasks).map(t => ({
-      id: t.id, topic: t.topic, cycle: t.cycle, name: t.name, type: t.type, what: t.what, evidence: t.evidence,
-      standard: staff ? t.standard : '', weight: t.weight, gate: t.gate, active: t.active, order: t.order, ai: t.ai, real: t.real, students: t.students, doc: t.doc,
-      phase: topicPhase[t.topic] || '', w: Math.round((eff[t.id] || 0) * 10) / 10
-    })),
+    tasks: (staff ? allTasks : activeTasks).map(t => {
+      const pr = promptsFor_(db, t);
+      return {
+        id: t.id, topic: t.topic, cycle: t.cycle, name: staff ? t.name : (t.traineeName || t.name), traineeName: staff ? t.traineeName : '', type: t.type, what: t.what,
+        evidence: t.evidence, standard: staff ? t.standard : '', weight: t.weight, gate: staff ? t.gate : false, active: t.active, order: t.order,
+        ai: t.ai, real: t.real, students: t.students, doc: t.doc, timeline: t.timeline,
+        refl: pr.reflection, nAnswers: pr.answers.length,
+        phase: topicPhase[t.topic] || '', w: Math.round((eff[t.id] || 0) * 10) / 10
+      };
+    }),
     rubricGroups: rubricGroups.list, rubrics: rubricGroups.rows, res: db.resources,
     trainees: trainees
   };

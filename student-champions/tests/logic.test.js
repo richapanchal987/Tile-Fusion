@@ -4,7 +4,7 @@ const dir = path.join(__dirname, '..', 'apps-script');
 const files = ['Config.gs', 'Logic.gs', 'SeedData.gs', 'DocSync.gs'];
 const load = list => vm.runInNewContext(list.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n') + `;({ buildCalendar_, expectedCycle_, effectiveWeights_,
   computeStats_, buildBootstrap_, validateAssessment_, validateCertification_, validateChecklist_, validateDue_, statsForTrainee_, normaliseDate_, addMonths_,
-  workingDaysElapsed_, visibleTo_, extOk_, safeFileName_, phaseRanges_, moduleShare_, aiOf_, failedAllowed_, SEED, PROGRAMME })`, {});
+  workingDaysElapsed_, visibleTo_, extOk_, safeFileName_, phaseRanges_, moduleShare_, aiOf_, failedAllowed_, promptsFor_, submitProblem_, statsForTraineeView_, SEED, PROGRAMME })`, {});
 const L = load(files);
 let n = 0;
 const J = x => JSON.parse(JSON.stringify(x));
@@ -226,22 +226,44 @@ t('bootstrap: a trainee gets only their own data and the end date; staff get tas
   const cfg = { appName: 'x' }, me = { role: 'Trainee', email: 'a@fsksurat.in' };
   const b = L.buildBootstrap_(db, me, '2026-06-02', cfg);
   assert.strictEqual(b.trainees.length, 1); assert.strictEqual(b.trainees[0].end, '2026-09-01'); assert.strictEqual(b.config.cycles, 13);
-  assert.strictEqual(b.tasks.length, 32); assert.strictEqual(b.topics[0].note, ''); assert.strictEqual(b.staff, undefined); assert.strictEqual(b.rubrics.length, 1);
+  assert.strictEqual(b.tasks.length, 32); assert.strictEqual(b.topics[0].note, ''); assert.strictEqual(b.staff, undefined); assert.strictEqual(b.rubrics.length, 0);
   assert.strictEqual(L.buildBootstrap_(db, { role: 'Admin', email: 'admin@fsksurat.in' }, '2026-06-02', cfg).trainees.length, 2);
   assert.strictEqual(L.buildBootstrap_(db, { role: 'None', email: 'q@x' }, '2026-06-02', cfg).tasks, undefined);
 });
-t('competency standard: staff receive it; a trainee never receives it, nor the rubric rows hidden from them', () => {
-  const db = newDb(); db.rubrics = [{ task: '2.1', order: 1, use: 'score', show: false, group: '', criterion: 'Can explain the programme', evaluated: '', levels: ['', '', '', ''] },
-    { task: '1.1', order: 1, use: 'score', show: true, group: '', criterion: 'Role', evaluated: 'what is judged', levels: ['', '', '', ''] }];
-  const std = id => db.tasks.find(x => x.id === id).standard;
-  assert.ok(std('2.1').length > 10);
+t('staff only: a trainee never receives the competency standard, the rubric, critical gates or the full RMC name; staff do', () => {
+  const db = newDb(); db.rubrics = [{ task: '2.1', order: 1, use: 'score', group: '', criterion: 'Can explain the programme', evaluated: '', levels: ['', '', '', ''] },
+    { task: '1.1', order: 1, use: 'score', group: '', criterion: 'Role', evaluated: 'what is judged', levels: ['', '', '', ''] }];
+  db.tasks.find(x => x.id === '7.4').traineeName = 'RMC';
+  const std = id => db.tasks.find(x => x.id === id).standard, full = db.tasks.find(x => x.id === '7.4').name;
+  assert.ok(std('2.1').length > 10); assert.ok(db.tasks.some(x => x.gate));
   const tr = L.buildBootstrap_(db, { role: 'Trainee', email: 'a@fsksurat.in' }, '2026-06-02', {});
-  assert.ok(tr.tasks.every(x => x.standard === '')); assert.strictEqual(tr.rubrics.map(r => r.task).join(','), '1.1');
-  assert.ok(!JSON.stringify(tr).includes(std('2.1')) && !JSON.stringify(tr).includes('Can explain the programme'), 'the standard is nowhere in what the trainee receives');
+  assert.ok(tr.tasks.every(x => x.standard === '' && !x.gate)); assert.strictEqual(tr.rubrics.length, 0);
+  assert.strictEqual(tr.tasks.find(x => x.id === '7.4').name, 'RMC');
+  const js = JSON.stringify(tr);
+  assert.ok(!js.includes(std('2.1')) && !js.includes('Can explain the programme') && !js.includes(full), 'nothing staff-only is in what the trainee receives');
   for (const role of ['Assessor', 'Admin']) {
     const st = L.buildBootstrap_(db, { role, email: role === 'Admin' ? 'admin@fsksurat.in' : 'tl@fsksurat.in' }, '2026-06-02', {});
-    assert.strictEqual(st.tasks.find(x => x.id === '2.1').standard, std('2.1')); assert.strictEqual(st.rubrics.length, 2); assert.strictEqual(st.rubrics.find(r => r.task === '2.1').show, false);
+    assert.strictEqual(st.tasks.find(x => x.id === '2.1').standard, std('2.1')); assert.strictEqual(st.rubrics.length, 2);
+    assert.strictEqual(st.tasks.find(x => x.id === '7.4').name, full); assert.ok(st.tasks.some(x => x.gate));
   }
+});
+t('submit rules: every reflection question must be answered; answer boxes are optional; evidence can be a link, a file or typed answers', () => {
+  const db = newDb(); const task = db.tasks.find(x => x.id === '1.2');
+  const none = L.promptsFor_(db, task);
+  assert.strictEqual(none.reflection.length, 1); assert.strictEqual(none.reflection[0].key, 'r-default'); assert.strictEqual(none.reflection[0].label, PR.defaultReflection);
+  const pr = { answers: [{ key: 'a-1', label: 'Issue' }, { key: 'a-2', label: 'Action' }], reflection: [{ key: 'r-1', label: 'Q1' }, { key: 'r-2', label: 'Q2' }] };
+  const p = { evidence: '', files: [] };
+  assert.match(L.submitProblem_(task, pr, { a: {}, r: { 'r-1': 'yes' } }, p), /1 still empty/);
+  assert.match(L.submitProblem_(task, pr, { a: {}, r: { 'r-1': 'yes', 'r-2': '  ' } }, p), /1 still empty/);
+  assert.match(L.submitProblem_(task, pr, { a: {}, r: { 'r-1': 'a', 'r-2': 'b' } }, p), /document link or a file, or type your answers/);
+  assert.strictEqual(L.submitProblem_(task, pr, { a: { 'a-1': 'one box is enough' }, r: { 'r-1': 'a', 'r-2': 'b' } }, p), '');
+  assert.strictEqual(L.submitProblem_(task, pr, { a: {}, r: { 'r-1': 'a', 'r-2': 'b' } }, { evidence: 'https://docs.google.com/x', files: [] }), '');
+  assert.strictEqual(L.submitProblem_(Object.assign({}, task, { evidence: '' }), pr, { a: {}, r: { 'r-1': 'a', 'r-2': 'b' } }, p), '', 'a task with no evidence line (6.2) submits with reflection only');
+});
+t('trainee view of statistics: critical gates are removed and gate blockers become one plain line', () => {
+  const v = L.statsForTraineeView_({ gates: [{ id: '1.2' }], gatesPassed: 0, gatesTotal: 1, blockers: ['Critical gate 1.2 not passed', 'Critical gate 6.1 not passed', 'Training not complete'] });
+  assert.strictEqual(v.gates.length, 0); assert.strictEqual(v.gatesTotal, 0);
+  deq(v.blockers, ['Some required tasks are not yet signed off by your mentor or TL.', 'Training not complete']);
 });
 t('pace: the calendar expects 0 at the start and 100 by the end', () => {
   const db = newDb();

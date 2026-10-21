@@ -144,7 +144,8 @@ function saveTask(task, isNew) {
       id: id, topic: topic, cycle: cycle, name: name, type: t.type, what: str_(t.what, 3000), evidence: str_(t.evidence, 1000),
       standard: str_(t.standard, 1000), weight: weight, gate: !!t.gate, active: existing ? existing.active : true,
       order: existing ? existing.order : ctx.db.tasks.reduce((m, x) => Math.max(m, x.order), 0) + 1,
-      ai: t.ai, real: !!t.real, students: t.real ? Math.max(1, students) : 0, doc: str_(t.doc, 200)
+      ai: t.ai, real: !!t.real, students: t.real ? Math.max(1, students) : 0, doc: str_(t.doc, 200),
+      traineeName: str_(t.traineeName, 200), timeline: !!t.timeline
     };
     upsert_('Tasks', [id], taskToRow_(row));
     logAction_(ctx.me, isNew ? 'Added task' : 'Edited task', '', id, name + (row.gate ? ' (gate)' : ''));
@@ -172,13 +173,12 @@ function saveRubric(taskId, rows) {
     const task = ctx.db.tasks.find(x => x.id === String(taskId).trim());
     if (!task) throw new Error('That task no longer exists.');
     const clean = (rows || []).map(r => ({ group: str_(r.group, 3000), criterion: str_(r.criterion, 300), evaluated: str_(r.evaluated, 1500),
-      levels: [0, 1, 2, 3].map(i => str_((r.levels || [])[i], 600)), use: r.use === 'reference' ? 'reference' : 'score',
-      show: !(r.show === false || r.show === 'No' || r.show === 0 || r.show === '0') })).filter(r => r.criterion);
+      levels: [0, 1, 2, 3].map(i => str_((r.levels || [])[i], 600)), use: r.use === 'reference' ? 'reference' : 'score' })).filter(r => r.criterion);
     if (!clean.some(r => r.use === 'score')) throw new Error('Keep at least one criterion that is used for scoring, or the assessor will have no rubric to score.');
     const keep = ctx.db.rubrics.filter(r => r.task !== task.id);
-    const mine = clean.map((r, i) => ({ task: task.id, order: i + 1, use: r.use, group: r.group, criterion: r.criterion, evaluated: r.evaluated, levels: r.levels, show: r.show }));
+    const mine = clean.map((r, i) => ({ task: task.id, order: i + 1, use: r.use, group: r.group, criterion: r.criterion, evaluated: r.evaluated, levels: r.levels }));
     const all = keep.concat(mine);
-    replaceRows_('Rubrics', all.map(r => [r.task, r.order, r.use, r.group, r.criterion, r.evaluated, r.levels[0], r.levels[1], r.levels[2], r.levels[3], r.show === false ? 'No' : 'Yes']));
+    replaceRows_('Rubrics', all.map(r => [r.task, r.order, r.use, r.group, r.criterion, r.evaluated, r.levels[0], r.levels[1], r.levels[2], r.levels[3]]));
     logAction_(ctx.me, 'Saved rubric', '', task.id, mine.length + ' criteria');
     return getBootstrap();
   });

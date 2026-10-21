@@ -25,7 +25,8 @@
   "admin": "Admin",
   "programme": "programme",
   "cycle": "cycle",
-  "Cycle": "Cycle"
+  "Cycle": "Cycle",
+  "evidenceLink": "Add document link"
  },
  "levels": {
   "notcertified": {
@@ -276,5 +277,128 @@
  "docSections": {
   "intro": "Introduction",
   "agreement": "Essential Agreement"
+ },
+ "defaultReflection": "What are the key takeaways from this section?",
+ "docRules": {
+  "_about": "How the Google Doc's text is shaped for the app. Sections are matched by tab name. Changes in the doc still flow through; these rules only drop, move or add parts.",
+  "dropParagraphs": [
+   "^(link|add|attach|paste|upload|insert)\\b[^.]{0,40}\\bhere\\b\\s*:?\\s*$"
+  ],
+  "dropTables": {
+   "Introduction": [
+    "Name:",
+    "Training Topics"
+   ]
+  },
+  "tablesToInstructions": [
+   "EY, PYP, MLC Classes",
+   "MYP Classes",
+   "DP Classes"
+  ],
+  "cut": [
+   {
+    "section": "Dummy Session",
+    "from": "TIMELINE",
+    "to": "Reflection Questions",
+    "exact": true
+   }
+  ],
+  "reflection": [
+   {
+    "section": "GP",
+    "from": "After the presentation, write a short reflection covering",
+    "single": true,
+    "split": "→"
+   },
+   {
+    "section": "Dummy Session",
+    "from": "Reflection Questions",
+    "to": "Discuss your reflection with your mentor"
+   },
+   {
+    "section": "Case Simulation",
+    "from": "After each role play, reflect on",
+    "to": "Documentation:"
+   },
+   {
+    "section": "Student Meeting",
+    "from": "Immediately after the meeting, and before receiving feedback",
+    "to": "Feedback & Reattempt",
+    "prev": true,
+    "label": "Right after the meeting"
+   },
+   {
+    "section": "Student Meeting",
+    "from": "Meeting Reflection",
+    "labels": {
+     "Documentation": "Final reflection"
+    }
+   },
+   {
+    "section": "Academic Accountability & Student Agency",
+    "from": "Final Reflection",
+    "to": "Expected Evidence"
+   },
+   {
+    "section": "P-T-S",
+    "from": "Reflection After All Three Role Plays"
+   },
+   {
+    "section": "Teacher Communication",
+    "from": "Professional Reflection",
+    "to": "Expected Submission",
+    "every": true,
+    "label": "Case {n}"
+   },
+   {
+    "section": "Parent Communication",
+    "from": "Professional Reflection",
+    "to": "Expected Submission",
+    "every": true,
+    "label": "Case {n}"
+   },
+   {
+    "section": "Case Conference",
+    "from": "Reflection",
+    "exact": true
+   }
+  ],
+  "addAnswersAfter": [
+   {
+    "sections": [
+     "Case Studies: 1",
+     "Case Studies: 2"
+    ],
+    "match": "issue identification",
+    "add": [
+     "What should the Student Champion do? (actions, support strategies, interventions, next steps)",
+     "Who else would you involve, and when would you refer?"
+    ]
+   }
+  ],
+  "appendAnswers": {
+   "P-T-S": [
+    [
+     "Conversation with the student",
+     "Summary and notes"
+    ],
+    [
+     "Conversation with the teacher",
+     "Summary and notes"
+    ],
+    [
+     "Conversation with the parent",
+     "Summary and notes"
+    ]
+   ]
+  },
+  "listAnswers": [
+   {
+    "section": "SC Practice Principles",
+    "from": "Situations",
+    "to": "What to submit",
+    "hint": "Classification (Appropriate / Appropriate with Conditions / Not Appropriate) and one line on what you would say or do"
+   }
+  ]
  }
 }

@@ -8,7 +8,7 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 
 | File | Type | Name in the editor | Lines | Size | Last line |
 |---|---|---|---|---|---|
-| `Actions.gs` | Script (.gs) | `Actions` | 170 | 9 KB | `}` |
+| `Actions.gs` | Script (.gs) | `Actions` | 173 | 9 KB | `}` |
 | `Admin.gs` | Script (.gs) | `Admin` | 228 | 13 KB | `}` |
 | `AppAdmin.html` | HTML | `AppAdmin` | 100 | 19 KB | `</script>` |
 | `AppAssess.html` | HTML | `AppAssess` | 78 | 8 KB | `</script>` |
@@ -18,15 +18,18 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `AppTeam.html` | HTML | `AppTeam` | 52 | 8 KB | `</script>` |
 | `AppTrainee.html` | HTML | `AppTrainee` | 197 | 21 KB | `</script>` |
 | `Art.html` | HTML | `Art` | 75 | 7 KB | `</script>` |
-| `Code.gs` | Script (.gs) | `Code` | 322 | 17 KB | `}` |
-| `Config.gs` | Script (.gs) | `Config` | 17 | 6 KB | `};` |
-| `DocSync.gs` | Script (.gs) | `DocSync` | 251 | 12 KB | `}` |
+| `Code.gs` | Script (.gs) | `Code` | 286 | 16 KB | `}` |
+| `Config.gs` | Script (.gs) | `Config` | 19 | 8 KB | `};` |
+| `DocSync.gs` | Script (.gs) | `DocSync` | 440 | 23 KB | `}` |
 | `Index.html` | HTML | `Index` | 25 | 1 KB | `</html>` |
-| `Logic.gs` | Script (.gs) | `Logic` | 401 | 20 KB | `}` |
-| `SeedData.gs` | Script (.gs) | `SeedData` | 57 | 20 KB | `};` |
-| `SeedRubrics.gs` | Script (.gs) | `SeedRubrics` | 20 | 6 KB | `const SEED_RUBRIC_PARTS = () => [SEED_RUBRICS_1, SEED_RUBRICS_2, SEED_` |
+| `Logic.gs` | Script (.gs) | `Logic` | 445 | 23 KB | `}` |
+| `Migrate.gs` | Script (.gs) | `Migrate` | 47 | 3 KB | `}` |
+| `SeedData.gs` | Script (.gs) | `SeedData` | 57 | 21 KB | `};` |
+| `SeedRubrics.gs` | Script (.gs) | `SeedRubrics` | 18 | 6 KB | `const SEED_RUBRIC_PARTS = () => [SEED_RUBRICS_1, SEED_RUBRICS_2, SEED_` |
 | `SeedRubrics1.gs` | Script (.gs) | `SeedRubrics1` | 126 | 19 KB | `];` |
-| `SeedRubrics2.gs` | Script (.gs) | `SeedRubrics2` | 91 | 20 KB | `];` |
-| `SeedRubrics3.gs` | Script (.gs) | `SeedRubrics3` | 63 | 10 KB | `];` |
+| `SeedRubrics2.gs` | Script (.gs) | `SeedRubrics2` | 93 | 20 KB | `];` |
+| `SeedRubrics3.gs` | Script (.gs) | `SeedRubrics3` | 37 | 4 KB | `];` |
+| `Store.gs` | Script (.gs) | `Store` | 110 | 6 KB | `}` |
 | `Styles.html` | HTML | `Styles` | 214 | 19 KB | `</style>` |
 | `Styles2.html` | HTML | `Styles2` | 168 | 14 KB | `</style>` |
+| `Work.gs` | Script (.gs) | `Work` | 55 | 3 KB | `}` |

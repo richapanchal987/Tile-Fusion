@@ -5,7 +5,8 @@
  * Everyone uses the web app only. The Sheet is its database and a private Drive
  * folder holds uploaded evidence; neither is shared with trainees or assessors.
  * Names, wording and rules come from Config.gs (built from programme.json).
- * Other files: Logic.gs (rules), Actions.gs (what trainees and assessors do), Admin.gs (people and curriculum),
+ * Other files: Logic.gs (rules), Store.gs (Sheet access and caching), Actions.gs (what trainees and assessors do), Work.gs (answers,
+ * reflection, autosave, comments), Admin.gs (people and curriculum), Migrate.gs (one-off updates),
  * DocSync.gs (module text from the Google Doc), SeedData.gs and SeedRubrics*.gs (starting content).
  * See ../README.md for setup.
  */
@@ -26,17 +27,21 @@ const SHEETS = {
   Phases: ['Phase'],
   Topics: ['Topic ID', 'Topic', 'Weight %', 'Phase', 'Pass mark %', 'Module text (doc section)', 'Internal notes'],
   Tasks: ['Task ID', 'Topic ID', 'Cycle', 'Task', 'Type', 'What the trainee will do', 'Evidence / Output', 'Competency standard',
-          'Weight within topic', 'Critical gate', 'Active', 'Order', 'AI use', 'Real student', 'Students needed', 'Module text (doc section)'],
-  Rubrics: ['Task ID', 'Order', 'Use', 'Group', 'Criterion', 'What is being evaluated', 'Level 1', 'Level 2', 'Level 3', 'Level 4', 'Shown to trainee'],
+          'Weight within topic', 'Critical gate', 'Active', 'Order', 'AI use', 'Real student', 'Students needed', 'Module text (doc section)',
+          'Trainee-facing name', 'Timeline box'],
+  Rubrics: ['Task ID', 'Order', 'Use', 'Group', 'Criterion', 'What is being evaluated', 'Level 1', 'Level 2', 'Level 3', 'Level 4'],
   Resources: ['Topic ID', 'Task ID', 'Resource', 'Link', 'Note'],
   Staff: ['Email', 'Name', 'Role', 'Certifies'],
   Trainees: ['Email', 'Name', 'Mentors', 'Team leader', 'Certifying mentor', 'Start date', 'Active', 'Certification', 'Certified by',
              'Certified on', 'Certification note'],
   Progress: ['Trainee', 'Task ID', 'Status', 'Evidence link / reference', 'Files', 'Reflection', 'Score', 'Feedback', 'Assessed by',
              'Date assessed', 'Submitted', 'Last updated', 'Criteria scores', 'Critical error', 'Failed attempts', 'Extra attempts',
-             'Due date', 'AI permitted'],
+             'Due date', 'AI permitted', 'Timeline', 'Answered', 'Reflected'],
   Checklists: ['Trainee', 'Task ID', 'Student code', 'Completed on'],
   Content: ['Key', 'Part', 'Title', 'Html'],
+  Prompts: ['Section', 'Kind', 'Key', 'Label', 'Group', 'Order'],
+  Answers: ['Key', 'Trainee', 'Task ID', 'Answers', 'Updated'],
+  Comments: ['Time', 'Trainee', 'Task ID', 'By', 'Name', 'Comment'],
   Log: ['Time', 'By', 'Action', 'Trainee', 'Task', 'Detail']
 };
 
@@ -64,15 +69,7 @@ function setup() {
     if (!isAdmin) throw new Error('Only an admin can run setup again.');
   }
   props.setProperty('SHEET_ID', ss.getId());
-
-  Object.keys(SHEETS).forEach(name => {
-    let sh = ss.getSheetByName(name);
-    if (!sh) sh = ss.insertSheet(name);
-    const h = SHEETS[name];
-    sh.getRange(1, 1, sh.getMaxRows(), h.length).setNumberFormat('@'); // plain text: typed text is never read as a formula
-    sh.getRange(1, 1, 1, h.length).setValues([h]).setFontWeight('bold').setBackground('#DCEAE6');
-    sh.setFrozenRows(1);
-  });
+  ensureSheets_(ss);
 
   const empty = name => ss.getSheetByName(name).getLastRow() < 2;
   const put = (name, rows) => { if (rows.length) ss.getSheetByName(name).getRange(2, 1, rows.length, rows[0].length).setValues(rows); };
@@ -87,15 +84,28 @@ function setup() {
   const s1 = ss.getSheetByName('Sheet1');
   if (s1 && s1.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(s1);
   evidenceRoot_();
+  clearCache_();
   try { installNightlyRefresh_(); } catch (e) { Logger.log('Could not install the nightly refresh (' + e.message + '). The Refresh button in Curriculum still works.'); }
   Logger.log('Setup complete. Next: run refreshModuleText to load the module from the Google Doc, then deploy as a web app.');
+}
+
+/** Creates any missing tab and writes every tab's headings. Safe to run again: existing rows are never touched. */
+function ensureSheets_(ss) {
+  Object.keys(SHEETS).forEach(name => {
+    let sh = ss.getSheetByName(name);
+    if (!sh) sh = ss.insertSheet(name);
+    const h = SHEETS[name];
+    sh.getRange(1, 1, sh.getMaxRows(), h.length).setNumberFormat('@'); // plain text: typed text is never read as a formula
+    sh.getRange(1, 1, 1, h.length).setValues([h]).setFontWeight('bold').setBackground('#DCEAE6');
+    sh.setFrozenRows(1);
+  });
 }
 
 /** The rubric rows in the shape of the Rubrics tab. Long group texts are stored once in SEED_RUBRIC_GROUPS. */
 function seedRubricRows_() {
   const rows = [];
   SEED_RUBRIC_PARTS().forEach(part => part.forEach(r => {
-    rows.push([r.task, r.order, r.use, SEED_RUBRIC_GROUPS[r.group] || '', r.criterion, r.evaluated, r.levels[0], r.levels[1], r.levels[2], r.levels[3], '']);
+    rows.push([r.task, r.order, r.use, SEED_RUBRIC_GROUPS[r.group] || '', r.criterion, r.evaluated, r.levels[0], r.levels[1], r.levels[2], r.levels[3]]);
   }));
   return rows;
 }
@@ -109,45 +119,7 @@ function doGet() {
 }
 function include_(name) { return HtmlService.createHtmlOutputFromFile(name).getContent(); }
 
-/* ---------------- Sheet access ---------------- */
-
-function ss_() {
-  const active = SpreadsheetApp.getActiveSpreadsheet();
-  if (active) return active;
-  const id = PropertiesService.getScriptProperties().getProperty('SHEET_ID');
-  if (!id) throw new Error('The app is not set up yet. Run setup() from the Apps Script editor.');
-  return SpreadsheetApp.openById(id);
-}
-function sheet_(name) {
-  const sh = ss_().getSheetByName(name);
-  if (!sh) throw new Error('The ' + name + ' tab is missing. Run setup() again.');
-  return sh;
-}
-function rows_(name) {
-  const sh = sheet_(name), w = SHEETS[name].length;
-  if (sh.getLastRow() < 2) return [];
-  return sh.getRange(2, 1, sh.getLastRow() - 1, w).getValues().filter(r => String(r[0]).trim() !== '');
-}
-function findRow_(name, keys) {
-  const sh = sheet_(name);
-  if (sh.getLastRow() < 2) return 0;
-  const vals = sh.getRange(2, 1, sh.getLastRow() - 1, keys.length).getValues();
-  const want = keys.map(k => String(k).trim().toLowerCase());
-  for (let i = 0; i < vals.length; i++) {
-    if (vals[i].every((v, j) => String(v).trim().toLowerCase() === want[j])) return i + 2;
-  }
-  return 0;
-}
-function upsert_(name, keys, row) {
-  const sh = sheet_(name), at = findRow_(name, keys);
-  const target = at || Math.max(sh.getLastRow(), 1) + 1;
-  sh.getRange(target, 1, 1, row.length).setValues([row]);
-}
-function replaceRows_(name, rows) {
-  const sh = sheet_(name), w = SHEETS[name].length;
-  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, w).clearContent();
-  if (rows.length) sh.getRange(2, 1, rows.length, w).setValues(rows);
-}
+/* Sheet access, caching and stored answers are in Store.gs. */
 
 const yes_ = v => v === true || /^(yes|true|y)$/i.test(String(v).trim());
 const yn_ = b => b ? 'Yes' : 'No';
@@ -166,28 +138,27 @@ const list_ = v => String(v || '').split(',').map(norm_).filter(Boolean);
 
 function taskToRow_(t) {
   return [t.id, t.topic, t.cycle, t.name, t.type, t.what, t.evidence, t.standard, t.weight, yn_(t.gate), yn_(t.active), t.order,
-          t.ai, yn_(t.real), t.students, t.doc];
+          t.ai, yn_(t.real), t.students, t.doc, t.traineeName || '', yn_(t.timeline)];
 }
 function readStaff_() {
   return rows_('Staff').map(r => ({ email: norm_(r[0]), name: String(r[1] || r[0]), role: /admin/i.test(r[2]) ? 'Admin' : 'Assessor', certifies: yes_(r[3]) }));
 }
 
-/**
- * Rubric rows. "Shown to trainee" is Yes or No. When it is blank, rows built only from the competency standard (plain criteria
- * with no description, group or level text) are hidden from trainees, and rows from the workbook's rubric tabs are shown.
- */
 function readRubrics_() {
-  const rows = rows_('Rubrics').map(r => ({ task: String(r[0]).trim(), order: num_(r[1]), use: String(r[2]).trim() === 'reference' ? 'reference' : 'score',
-    group: String(r[3] || ''), criterion: String(r[4] || ''), evaluated: String(r[5] || ''), levels: [r[6], r[7], r[8], r[9]].map(x => String(x || '')),
-    cell: String(r[10] || '').trim().toLowerCase() }));
-  const plain = {};
-  rows.filter(r => r.use === 'score').forEach(r => {
-    const rich = !!(r.group || r.evaluated || r.levels.some(Boolean));
-    plain[r.task] = (plain[r.task] === undefined ? true : plain[r.task]) && !rich;
-  });
-  rows.forEach(r => { r.show = r.cell === 'no' ? false : r.cell === 'yes' ? true : (r.use === 'reference' || !plain[r.task]); delete r.cell; });
-  return rows;
+  return rows_('Rubrics').map(r => ({ task: String(r[0]).trim(), order: num_(r[1]), use: String(r[2]).trim() === 'reference' ? 'reference' : 'score',
+    group: String(r[3] || ''), criterion: String(r[4] || ''), evaluated: String(r[5] || ''), levels: [r[6], r[7], r[8], r[9]].map(x => String(x || '')) }));
 }
+
+function readTrainees_() {
+  return rows_('Trainees').map(r => ({
+    email: norm_(r[0]), name: String(r[1] || r[0]), assessors: list_(r[2]), tl: norm_(r[3]), certifier: norm_(r[4]),
+    start: fmtDate_(r[5]), active: String(r[6]).trim() === '' ? true : yes_(r[6]),
+    confirmed: LEVELS.indexOf(String(r[7])) > -1 ? String(r[7]) : 'notcertified',
+    confirmedBy: String(r[8] || ''), confirmedAt: String(r[9] || ''), confirmNote: String(r[10] || '')
+  }));
+}
+/** Who is signed in, reading only Staff and Trainees (for quick reads such as module text). */
+function meLight_() { return meFromDb_({ staff: readStaff_(), trainees: readTrainees_() }); }
 
 function readDb_() {
   const settings = Object.assign({}, SEED.settings);
@@ -202,25 +173,24 @@ function readDb_() {
       id: String(r[0]).trim(), topic: num_(r[1]), cycle: num_(r[2], 1), name: String(r[3]), type: String(r[4] || ''),
       what: String(r[5] || ''), evidence: String(r[6] || ''), standard: String(r[7] || ''), weight: num_(r[8]),
       gate: yes_(r[9]), active: String(r[10]).trim() === '' ? true : yes_(r[10]), order: num_(r[11], 9999),
-      ai: AI_KEYS.indexOf(String(r[12]).trim()) > -1 ? String(r[12]).trim() : 'ask', real: yes_(r[13]), students: num_(r[14], 0), doc: String(r[15] || '')
+      ai: AI_KEYS.indexOf(String(r[12]).trim()) > -1 ? String(r[12]).trim() : 'ask', real: yes_(r[13]), students: num_(r[14], 0), doc: String(r[15] || ''),
+      traineeName: String(r[16] || '').trim(), timeline: yes_(r[17])
     })),
     rubrics: readRubrics_(),
     resources: rows_('Resources').map(r => ({ topic: num_(r[0]), task: String(r[1] || '').trim(), label: String(r[2] || ''), url: String(r[3] || ''), note: String(r[4] || '') })),
     staff: readStaff_(),
-    trainees: rows_('Trainees').map(r => ({
-      email: norm_(r[0]), name: String(r[1] || r[0]), assessors: list_(r[2]), tl: norm_(r[3]), certifier: norm_(r[4]),
-      start: fmtDate_(r[5]), active: String(r[6]).trim() === '' ? true : yes_(r[6]),
-      confirmed: LEVELS.indexOf(String(r[7])) > -1 ? String(r[7]) : 'notcertified',
-      confirmedBy: String(r[8] || ''), confirmedAt: String(r[9] || ''), confirmNote: String(r[10] || '')
-    })),
+    trainees: readTrainees_(),
     progress: rows_('Progress').map(r => ({
       trainee: norm_(r[0]), task: String(r[1]).trim(), status: statusKey_(String(r[2])), evidence: String(r[3] || ''),
       files: parseFiles_(r[4]), reflection: String(r[5] || ''), score: num_(r[6], null), feedback: String(r[7] || ''),
       assessor: String(r[8] || ''), date: fmtDate_(r[9]), submitted: String(r[10] || ''), updated: String(r[11] || ''),
       criteria: parseObj_(r[12]), critical: String(r[13] || ''), failed: num_(r[14], 0), extra: num_(r[15], 0),
-      due: fmtDate_(r[16]), ai: AI_KEYS.indexOf(String(r[17]).trim()) > -1 ? String(r[17]).trim() : ''
+      due: fmtDate_(r[16]), ai: AI_KEYS.indexOf(String(r[17]).trim()) > -1 ? String(r[17]).trim() : '',
+      timeline: String(r[18] || ''), answered: num_(r[19], 0), reflected: num_(r[20], 0)
     })),
-    checklists: rows_('Checklists').map(r => ({ trainee: norm_(r[0]), task: String(r[1]).trim(), code: String(r[2]), at: fmtDate_(r[3]) }))
+    checklists: rows_('Checklists').map(r => ({ trainee: norm_(r[0]), task: String(r[1]).trim(), code: String(r[2]), at: fmtDate_(r[3]) })),
+    prompts: rows_('Prompts').map(r => ({ section: String(r[0]), kind: String(r[1]), key: String(r[2]), label: String(r[3] || ''), group: String(r[4] || ''), order: num_(r[5]) })),
+    comments: rows_('Comments').map(r => ({ at: String(r[0]), trainee: norm_(r[1]), task: String(r[2]).trim(), by: norm_(r[3]), name: String(r[4] || ''), text: String(r[5] || '') }))
   };
 }
 
@@ -238,7 +208,7 @@ function appConfig_() {
   const p = PROGRAMME;
   return { appName: CONFIG.APP_NAME, orgName: CONFIG.ORG_NAME, domain: CONFIG.DOMAIN, maxFiles: CONFIG.MAX_FILES_PER_TASK, taskTypes: TASK_TYPES,
     words: p.words, levels: p.levels, statusLabels: p.statusLabels, scale: p.scale, scaleHelp: p.scaleHelp, outcomes: p.outcomes, aiOptions: p.aiOptions, aiRule: p.aiRule,
-    criticalErrors: p.criticalErrors, checklist: p.checklist, docSections: p.docSections, storagePrefix: p.app.storagePrefix, docName: p.app.moduleDocName };
+    criticalErrors: p.criticalErrors, checklist: p.checklist, evidenceLink: p.words.evidenceLink, docSections: p.docSections, storagePrefix: p.app.storagePrefix, docName: p.app.moduleDocName };
 }
 
 function withLock_(fn) {
@@ -250,7 +220,7 @@ function requireStaff_(me) { if (me.role !== 'Admin' && me.role !== 'Assessor') 
 function requireAdmin_(me) { if (me.role !== 'Admin') throw new Error('Only an admin can do this.'); }
 
 function logAction_(me, action, trainee, task, detail) {
-  sheet_('Log').appendRow([nowStamp_(), me.email, action, trainee || '', task || '', String(detail || '').slice(0, 1000)]);
+  append_('Log', [nowStamp_(), me.email, action, trainee || '', task || '', String(detail || '').slice(0, 1000)]);
 }
 
 /** Loads the db and the caller, and checks the caller may act on this trainee. */
@@ -277,12 +247,12 @@ function taskOf_(db, id) {
 function progressOf_(db, email, taskId) {
   return db.progress.find(p => p.trainee === email && p.task === taskId) ||
     { trainee: email, task: taskId, status: 'not', evidence: '', files: [], reflection: '', score: null, feedback: '', assessor: '', date: '',
-      submitted: '', updated: '', criteria: {}, critical: '', failed: 0, extra: 0, due: '', ai: '' };
+      submitted: '', updated: '', criteria: {}, critical: '', failed: 0, extra: 0, due: '', ai: '', timeline: '', answered: 0, reflected: 0 };
 }
 function saveProgress_(p) {
   upsert_('Progress', [p.trainee, p.task], [p.trainee, p.task, statusLabel_(p.status), p.evidence, JSON.stringify(p.files || []),
     p.reflection, p.score == null ? '' : p.score, p.feedback, p.assessor, p.date, p.submitted, p.updated,
-    JSON.stringify(p.criteria || {}), p.critical || '', p.failed || 0, p.extra || 0, p.due || '', p.ai || '']);
+    JSON.stringify(p.criteria || {}), p.critical || '', p.failed || 0, p.extra || 0, p.due || '', p.ai || '', p.timeline || '', p.answered || 0, p.reflected || 0]);
 }
 function traineeRow_(t) {
   return [t.email, t.name, t.assessors.join(','), t.tl || '', t.certifier || '', t.start, yn_(t.active), t.confirmed, t.confirmedBy, t.confirmedAt, t.confirmNote];

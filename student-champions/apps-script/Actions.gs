@@ -2,17 +2,19 @@
 
 /* ---------------- Trainee actions ---------------- */
 
-/** action: 'save' keeps the work in progress, 'submit' sends it for review. */
-function saveMyTask(taskId, action, evidence, reflection) {
+/** action: 'save' keeps the work in progress, 'submit' sends it for review. Typed answers and reflection are saved by autosaveTask. */
+function saveMyTask(taskId, action, evidence) {
   return withLock_(() => {
     const ctx = traineeContext_('submit their own tasks');
     const task = taskOf_(ctx.db, taskId);
     const p = progressOf_(ctx.db, ctx.me.email, task.id);
     if (EDITABLE_STATES.indexOf(p.status) < 0) throw new Error('This task has already been submitted or completed.');
-    p.evidence = str_(evidence, 1000);
-    p.reflection = str_(reflection, 5000);
+    if (evidence !== undefined && evidence !== null) p.evidence = str_(evidence, 1000);
     if (action === 'submit') {
-      if (!p.evidence && !p.files.length) throw new Error('Add a link, reference or file as evidence before submitting.');
+      const pr = promptsFor_(ctx.db, task), work = readWork_(ctx.me.email, task.id);
+      const problem = submitProblem_(task, pr, work, p);
+      if (problem) throw new Error(problem);
+      p.answered = filled_(work.a, pr.answers); p.reflected = filled_(work.r, pr.reflection);
       if (task.real) {
         const have = ctx.db.checklists.filter(c => c.trainee === ctx.me.email && c.task === task.id).length;
         if (have < Math.max(1, task.students)) {
@@ -42,7 +44,7 @@ function saveChecklist(taskId, studentCode, ticked) {
     if (ctx.db.checklists.some(c => c.trainee === ctx.me.email && c.task === task.id && c.code.toLowerCase() === code.toLowerCase())) {
       throw new Error('You already completed the checklist for ' + code + ' on this task.');
     }
-    sheet_('Checklists').appendRow([ctx.me.email, task.id, code, todayIso_()]);
+    append_('Checklists', [ctx.me.email, task.id, code, todayIso_()]);
     logAction_(ctx.me, 'Consent checklist', ctx.me.email, task.id, code);
     return getBootstrap();
   });
@@ -125,8 +127,8 @@ function assessTask(traineeEmail, taskId, input) {
   });
 }
 
-/** The deadline agreed with the trainee, and whether they may use AI on this task (the default comes from the task). */
-function setTaskPlan(traineeEmail, taskId, due, ai) {
+/** The deadline agreed with the trainee, whether they may use AI on this task (the default comes from the task), and their timeline (5.2). */
+function setTaskPlan(traineeEmail, taskId, due, ai, timeline) {
   return withLock_(() => {
     const ctx = context_(traineeEmail); requireStaff_(ctx.me);
     const task = taskOf_(ctx.db, taskId);
@@ -135,6 +137,7 @@ function setTaskPlan(traineeEmail, taskId, due, ai) {
     ai = String(ai || '');
     if (ai !== '' && AI_KEYS.indexOf(ai) < 0) throw new Error('Choose how AI may be used on this task.');
     p.ai = ai;
+    if (timeline !== undefined && timeline !== null) p.timeline = str_(timeline, 3000);
     p.updated = nowStamp_();
     saveProgress_(p);
     logAction_(ctx.me, 'Task plan', ctx.tr.email, task.id, 'due ' + (p.due || 'none') + ', AI ' + (p.ai || 'task default'));

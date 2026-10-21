@@ -63,9 +63,10 @@ for i, r in enumerate(table, 1):
     what = r["what"] or WHAT.get(r["id"]) or clean_what(t["What the New Joinee Will Do"], r["name"])
     tasks.append({
         "id": r["id"], "topic": int(r["id"].split(".")[0]), "cycle": int(r["cycle"]), "name": r["name"], "type": r["type"],
-        "what": what, "evidence": r["evidence"] or fix(t["Evidence / Output"]), "standard": r["standard"] or fix(t["Competency Standard"]),
+        "what": what, "evidence": "" if r["evidence"] == "-" else (r["evidence"] or fix(t["Evidence / Output"])), "standard": r["standard"] or fix(t["Competency Standard"]),
         "weight": float(r["weight"]), "gate": r["gate"] == "1", "active": True, "order": i,
-        "ai": r["ai"], "real": r["real_student"] == "1", "students": int(r["students"]), "doc": r["doc_section"]})
+        "ai": r["ai"], "real": r["real_student"] == "1", "students": int(r["students"]), "doc": r["doc_section"],
+        "traineeName": r.get("trainee_name", ""), "timeline": r.get("timeline", "") == "1"})
 
 # checks the user asked for
 ids = [t["id"] for t in tasks]
@@ -163,11 +164,6 @@ for t in tasks:
     for r in rows:
         n += 1
         rubrics.append(dict(task=t["id"], order=n, use="score", **r))
-    if key == "guide":                                                      # kept for reference, not used for scoring yet
-        for name, f in (("Parent Guidebook (reference only)", "parent_guidebook"), ("Student Guidebook (reference only)", "student_guidebook")):
-            for r in rows_simple(rub / (f + ".csv")):
-                n += 1
-                rubrics.append(dict(task=t["id"], order=n, use="reference", **dict(r, group=name)))
     assert any(x["task"] == t["id"] and x["use"] == "score" for x in rubrics), "no rubric for %s" % t["id"]
 
 # ---------------------------------------------------------------- output
