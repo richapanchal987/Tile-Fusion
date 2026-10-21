@@ -168,4 +168,20 @@ t('deadlines can be changed by the Coordinator but must rise and fit the program
   throws(() => call(TLS, 'saveMilestones', []), /do not have access/);
 });
 
+t('supervision log: needs Supervised Practice, anonymous code, and respects caseload limits (R22)', () => {
+  throws(() => call(TLS, 'logSupervision', TR, { type: 'Case', code: 'C-1', date: '2026-11-10' }), /not yet cleared/);
+  call(TLS, 'updateTrainee', TR, { status: 'Active' });
+  const tr = W.sheets.Trainees; for (let r = 2; r <= tr.getLastRow(); r++) if (tr.get(r, 3) === TR) tr.set(r, 8, 'Supervised Practice');   // stands in for the confirmation, which needs every prerequisite passed
+  throws(() => call(TLS, 'logSupervision', TR, { type: 'Case', code: '', date: '2026-11-10' }), /anonymous/);
+  ['C-1', 'C-2', 'C-3'].forEach(c => call(TLS, 'logSupervision', TR, { type: 'Case', code: c, date: '2026-11-10' }));
+  throws(() => call(TLS, 'logSupervision', TR, { type: 'Case', code: 'C-4', date: '2026-11-10' }), /limit/);
+  call(TLS, 'logSupervision', TR, { type: 'Group', code: 'G-1', date: '2026-11-10' });
+  throws(() => call(TLS, 'logSupervision', TR, { type: 'Group', code: 'G-2', date: '2026-11-10' }), /limit/);
+  throws(() => call(TLJ, 'logSupervision', TR, { type: 'Case', code: 'C-9', date: '2026-11-10' }), /other section/);
+  const b = call(TR, 'getBootstrap'); assert.strictEqual(b.limits.cases, 3); assert.strictEqual(b.supervision.length, 4); assert.ok(!JSON.stringify(b.supervision).includes('notes'));
+  assert.strictEqual(b.keySkills.length, 1);
+  const id = call(TLS, 'getBootstrap').trainees.find(x => x.record.email === TR).supervision[0].id;
+  call(TLS, 'removeSupervision', id); assert.strictEqual(call(TR, 'getBootstrap').limits.cases + call(TR, 'getBootstrap').limits.groups, 3);
+});
+
 console.log(n + ' server tests passed');

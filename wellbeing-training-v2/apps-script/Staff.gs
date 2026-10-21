@@ -187,6 +187,39 @@ function principalSignOff(email) {
   });
 }
 
+/* ---------------- supervision log and caseload (R22) ---------------- */
+
+/** One supervised case or group session. Cases are recorded by an anonymous code only, never a student's name. */
+function logSupervision(email, f) {
+  return withLock_(() => {
+    const c = staffCtx_(['tl']), tr = ownTrainee_(c, email);
+    if (tr.caseReadiness === 'Not Cleared') throw new Error('This trainee is not yet cleared for Supervised Practice.');
+    if (SUP_TYPES.indexOf(f.type) < 0) throw new Error('Choose Case or Group.');
+    const date = normaliseDate_(f.date); if (!date) throw new Error('Enter a valid date.');
+    const code = str_(f.code, 40); if (!code) throw new Error('Enter an anonymous case code, not a student name.');
+    if (c.db.supervision.some(x => x.trainee === tr.email && x.type === f.type && x.code.toLowerCase() === code.toLowerCase())) throw new Error('That code is already logged for this trainee.');
+    const lim = caseLimits_(c.db, tr, computeFor_(c.db, tr, c.today));
+    if (f.type === 'Case' && lim.cases >= lim.maxCases) throw new Error('This trainee already has ' + lim.cases + ' cases, the limit' + (lim.milestone4 ? '' : ' before Milestone 4') + '.');
+    if (f.type === 'Group' && lim.groups >= lim.maxGroups) throw new Error('This trainee already has ' + lim.groups + ' group, the limit.');
+    const id = newId_('S');
+    appendRow_('Supervision', [id, tr.email, date, f.type, code, c.me.email, str_(f.notes, 2000)]);
+    tr.cases = lim.cases + (f.type === 'Case' ? 1 : 0); tr.groups = lim.groups + (f.type === 'Group' ? 1 : 0); saveTrainee_(tr);
+    logChange_(c.me, 'Supervision', tr.email, 'logged ' + f.type, '', code);
+    return getBootstrap();
+  });
+}
+function removeSupervision(id) {
+  return withLock_(() => {
+    const c = staffCtx_(['tl']), e = c.db.supervision.find(x => x.id === String(id));
+    if (!e) throw new Error('That entry was not found.');
+    const tr = ownTrainee_(c, e.trainee), keep = c.db.supervision.filter(x => x.id !== e.id);
+    replaceRows_('Supervision', keep.map(x => [x.id, x.trainee, x.date, x.type, x.code, x.supervisor, x.notes]));
+    tr.cases = keep.filter(x => x.trainee === tr.email && x.type === 'Case').length; tr.groups = keep.filter(x => x.trainee === tr.email && x.type === 'Group').length; saveTrainee_(tr);
+    logChange_(c.me, 'Supervision', tr.email, 'removed ' + e.type, e.code, '');
+    return getBootstrap();
+  });
+}
+
 /* ---------------- professional behaviour (R20) ---------------- */
 
 function saveBehaviour(email, cycle, f) {

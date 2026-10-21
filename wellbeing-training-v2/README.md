@@ -19,13 +19,15 @@ It is a Google Apps Script web app. The Google Sheet is the database, a private 
 - Roles and sections: trainee, Team Leader (own section in full, other section read-only for cover without private notes), Coordinator, Principal (clearance page only).
 - Anonymisation tick, no audio or video upload, history log, read-only records after Completed or Left.
 
-**Not yet built (Steps 2 and 3):** Key Skills tracker screen (the rule is already enforced in clearance), supervision log and caseload limits, email alerts, content review flags, holiday calendar beyond the date list.
+**Step 2 (done):** Key Skills tracker for trainees and Team Leaders, supervised practice log with anonymous case codes and caseload limits (3 cases and 1 group before Milestone 4, 5 cases in Milestone 4), clearance checklist.
+
+**Not yet built (Step 3):** email alerts, content review flags, holiday calendar beyond the date list.
 
 ## Deploy (new Apps Script project, copy of the Sheet)
 
 1. Create a new Google Sheet and open Extensions > Apps Script.
 2. Add these files (names exactly as shown): `Schema.gs, Dates.gs, Rules.gs, Data.gs, Import.gs, View.gs, Code.gs, Actions.gs, Staff.gs` and the HTML files `Index, Styles, Art, AppCore, AppTrainee, AppTeam, AppAdmin`. Replace `appsscript.json` with the one here. (Using `clasp push` from `apps-script/` avoids copy-paste mistakes.)
-3. Run `setup()` once and accept the permissions. It creates every tab, the evidence folder, default policies and makes `richa.panchal@fsksurat.in` the Coordinator.
+3. Run `setup()` once (run it again after an update: it adds any new tab and never overwrites data) and accept the permissions. It creates every tab, the evidence folder, default policies and makes `richa.panchal@fsksurat.in` the Coordinator.
 4. Deploy > New deployment > Web app, execute as you, access: anyone in fsksurat.in.
 5. Open the app as the Coordinator: Admin > Task list import. Share the workbook with the account that runs the app, paste its link, press "Check the workbook", read the notes, then "Import". Add staff and holidays on the same page.
 6. Team Leaders enrol trainees on the Team page.
@@ -34,8 +36,8 @@ It is a Google Apps Script web app. The Google Sheet is the database, a private 
 
 ```
 node tests/rules.test.js      # the rules (21)
-node tests/server.test.js     # the server, roles and privacy (14)
-NODE_PATH=$(npm root -g) node tests/e2e.js        # real pages in Chromium (9)
+node tests/server.test.js     # the server, roles and privacy (15)
+NODE_PATH=$(npm root -g) node tests/e2e.js        # real pages in Chromium (10)
 NODE_PATH=$(npm root -g) node tests/contrast.js   # WCAG AA text contrast, light and dark
 ```
 Tests use `tests/fixture.js`, a made-up workbook. The real workbook is never committed because it holds Team Leader-only answer keys.

@@ -71,6 +71,9 @@ function traineeBootstrap_(db, me, today, out) {
   const acks = db.acks[tr.email] || [];
   out.policies = db.policies.map(p => { const mineAck = acks.filter(x => x.policy === p.name).sort((a, b) => b.at.localeCompare(a.at))[0];
     return { name: p.name, link: p.link, updated: p.updated, acknowledged: mineAck ? mineAck.at : '', ackedVersion: mineAck ? mineAck.updated : '', stale: !!(mineAck && p.updated && mineAck.updated !== p.updated) }; });
+  out.keySkills = db.keySkills.map(k => { const s = calc.clearance.keySkills.find(x => x.n === k.n) || {}; return { n: k.n, name: k.name, rule: k.rule, linked: k.linked, occasions: s.occasions || 0, real: s.real || 0, ok: !!s.ok, rubricLink: k.rubricLink }; });
+  out.supervision = db.supervision.filter(x => x.trainee === tr.email).map(x => ({ id: x.id, date: x.date, type: x.type, code: x.code }));
+  out.limits = caseLimits_(db, tr, calc);
   out.toolkit = db.toolkit; out.rubrics = db.rubrics; out.milestones = milestoneRows_(db);
   return out;
 }
@@ -81,8 +84,9 @@ function staffTraineeView_(db, tr, me, today, cover) {
   const calc = computeFor_(db, tr, today), rec = Object.assign({}, tr, { tlName: tlName_(db, tr.tl), principalName: tlName_(db, tr.principal) });
   if (cover) COVER_HIDDEN_TRAINEE.forEach(k => { rec[k] = ''; });
   const beh = (db.behaviour[tr.email] || []).map(b => cover ? Object.assign({}, b, { tlNotes: '' }) : b);
+  const sup = db.supervision.filter(x => x.trainee === tr.email).map(x => cover ? Object.assign({}, x, { notes: '' }) : x);
   const attempts = db.attempts.filter(a => a.trainee === tr.email).map(a => cover ? Object.assign({}, a, { tlNotes: '' }) : a);
-  return { record: rec, cover: !!cover, calc: calc, attempts: attempts, entry: db.entry[tr.email] || {}, behaviour: beh, taskDates: db.taskDates[tr.email] || {}, acks: db.acks[tr.email] || [] };
+  return { record: rec, cover: !!cover, calc: calc, attempts: attempts, entry: db.entry[tr.email] || {}, supervision: sup, limits: caseLimits_(db, tr, calc), behaviour: beh, taskDates: db.taskDates[tr.email] || {}, acks: db.acks[tr.email] || [] };
 }
 
 function tlBootstrap_(db, me, today, out) {
@@ -123,7 +127,7 @@ function principalBootstrap_(db, me, today, out) {
 }
 
 function buildBootstrap_(db, me, today) {
-  const out = { me: me, config: appConfig_(), today: today, settings: { cycles: db.settings.cycles, daysPerCycle: db.settings.daysPerCycle, passScore: db.settings.passScore, maxUploadMb: db.settings.maxUploadMb } };
+  const out = { me: me, config: appConfig_(), today: today, settings: { keySkillOccasions: db.settings.keySkillOccasions, strandAverageMin: db.settings.strandAverageMin, supervisedEarliestCycle: db.settings.supervisedEarliestCycle, behaviourCycles: db.settings.behaviourCycles, cycles: db.settings.cycles, daysPerCycle: db.settings.daysPerCycle, passScore: db.settings.passScore, maxUploadMb: db.settings.maxUploadMb } };
   if (me.kind === 'none') return out;
   if (me.kind === 'trainee') return traineeBootstrap_(db, me, today, out);
   if (me.kind === 'tl') return tlBootstrap_(db, me, today, out);
@@ -133,3 +137,9 @@ function buildBootstrap_(db, me, today) {
 
 /** May this person rate and edit this trainee? Team Leaders of the trainee's own section only (R17). */
 const canRate_ = (me, tr) => me.kind === 'tl' && me.section === tr.section;
+
+/** Caseload limits (R22): before Milestone 4 a trainee may carry a few cases and one group; Milestone 4 allows more. */
+function caseLimits_(db, tr, calc) {
+  const mine = db.supervision.filter(x => x.trainee === tr.email), m4 = !calc.tasks || !db.tasks.some(t => t.active && t.milestone >= 1 && t.milestone <= 3 && calc.tasks[t.id] && !calc.tasks[t.id].passed);
+  return { cases: mine.filter(x => x.type === 'Case').length, groups: mine.filter(x => x.type === 'Group').length, maxCases: m4 ? db.settings.maxCasesM4 : db.settings.maxCases, maxGroups: db.settings.maxGroups, milestone4: m4 };
+}

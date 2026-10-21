@@ -114,7 +114,8 @@ function readDb_() {
     rubrics: rows_('Rubrics').map(r => ({ rubric: String(r[0]), criterion: String(r[1] || ''), levels: [2, 3, 4, 5].map(i => String(r[i] || '')) })),
     policies: rows_('Policies').map(r => ({ name: String(r[0]), link: String(r[1] || ''), updated: normaliseDate_(r[2]) })),
     holidays: rows_('Holidays').map(r => normaliseDate_(r[0])).filter(Boolean),
-    attempts: rows_('Attempts').map(attemptFromRow_), taskDates: {}, acks: {}, behaviour: {}
+    attempts: rows_('Attempts').map(attemptFromRow_), taskDates: {}, acks: {}, behaviour: {},
+    supervision: rows_('Supervision').map(r => ({ id: String(r[0]), trainee: norm_(r[1]), date: normaliseDate_(r[2]), type: String(r[3]), code: String(r[4] || ''), supervisor: norm_(r[5]), notes: String(r[6] || '') }))
   };
   db.holidaySet = holidaySet_(db.holidays);
   rows_('EntryCheck').forEach(r => { const e = norm_(r[0]); (db.entry[e] = db.entry[e] || {})[String(r[1])] = { rating: blank_(r[2]) ? null : num_(r[2], null), pathway: String(r[3] || ''), notes: String(r[4] || '') }; });

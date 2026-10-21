@@ -76,7 +76,7 @@ function makeWorld() {
   const src = ['Schema.gs', 'Dates.gs', 'Rules.gs', 'Data.gs', 'Import.gs', 'View.gs', 'Code.gs', 'Actions.gs', 'Staff.gs'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   const names = ['setup', 'getBootstrap', 'importWorkbook', 'saveDraft', 'uploadEvidence', 'removeEvidence', 'submitAttempt', 'getEvidenceFile', 'markSeen', 'acknowledgePolicy',
     'savePlannedDate', 'saveSelfRating', 'rateAttempt', 'recordObserved', 'releaseRating', 'confirmProcess', 'setEntryCheck', 'setDueOverride', 'enrolTrainee', 'updateTrainee',
-    'confirmSupervised', 'recordClearance', 'principalSignOff', 'saveBehaviour', 'saveReliability', 'saveTask', 'setTaskActive', 'saveUser', 'saveMilestones', 'savePolicy',
+    'confirmSupervised', 'recordClearance', 'principalSignOff', 'logSupervision', 'removeSupervision', 'saveBehaviour', 'saveReliability', 'saveTask', 'setTaskActive', 'saveUser', 'saveMilestones', 'savePolicy',
     'saveHolidays', 'saveSettings', 'exportCatalogue', 'exportTraineeRecord', 'getHistory'];
   const api = vm.runInContext(src + `;({${names.join(',')}, SHEETS})`, ctx);
   const plain = x => JSON.parse(JSON.stringify(x === undefined ? null : x));

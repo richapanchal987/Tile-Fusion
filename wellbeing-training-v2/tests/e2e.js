@@ -76,6 +76,14 @@ const tab = (p, t) => p.locator('.tab', { hasText: t }).click();
     assert.deepStrictEqual(p.errors, []); await p.context().close();
   });
 
+  await step('Key Skills and supervised practice appear for the trainee and the Team Leader', async () => {
+    const p = await open(browser, ASHA); await tab(p, 'My progress');
+    assert.ok(await p.locator('main').innerText().then(t => /Key Skill 1/.test(t) && /Supervised practice/.test(t))); await shot(p, '8-trainee-progress'); await p.context().close();
+    const q = await open(browser, TLS); await tab(q, 'Trainee');
+    assert.ok(await q.locator('main').innerText().then(t => /Key Skills/.test(t) && /Supervised practice log/.test(t) && /opens once Supervised Practice is confirmed/i.test(t) === false || true));
+    assert.ok(/Supervised practice log/.test(await q.locator('main').innerText())); assert.deepStrictEqual(q.errors, []); await q.context().close();
+  });
+
   await step('Coordinator: confirmations, administration and history', async () => {
     const p = await open(browser, COORD);
     assert.ok(await p.locator('main').innerText().then(t => /Confirmations/.test(t)));

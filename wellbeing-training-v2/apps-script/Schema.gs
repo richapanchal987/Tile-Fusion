@@ -20,6 +20,7 @@ const BEHAVIOUR_ITEMS = ['Reliability and follow-through', 'Boundaries and ethic
 const DECISIONS = ['Pending', 'Cleared', 'Cleared with conditions', 'Not yet'];
 const STRANDS = ['Safe & Ethical Practice', 'Working with Students', 'Working with Adults', 'School Systems & Accountability'];
 const OBS_TYPES = ['Role play', 'Simulation', 'Real', 'Written', 'Viva', 'Not observed'];
+const SUP_TYPES = ['Case', 'Group'];
 const DEFAULT_POLICIES = ['Code of Conduct', 'Personal Relationships', 'Celebration Policy', 'Mobile Phone Usage', 'Eating Etiquette'];
 
 /** [key, workbook header, group, input kind, can a trainee see it?] */
@@ -98,6 +99,7 @@ const SHEETS = {
   TaskDates: ['Trainee', 'Task ID', 'Planned Date', 'Due Override'],
   PolicyAcks: ['Trainee', 'Policy', 'Policy Updated', 'Acknowledged'],
   Behaviour: ['Trainee', 'Cycle'].concat(BEHAVIOUR_ITEMS, ['Comments', 'Development Goal', 'Reliability Input', 'Self Ratings', 'Rating Released', 'Team Leader Private Notes']),
+  Supervision: ['Entry ID', 'Trainee', 'Date', 'Type', 'Case Code', 'Supervisor', 'Notes'],
   History: ['Time', 'By', 'Table', 'Record', 'Field', 'Old', 'New']
 };
 
