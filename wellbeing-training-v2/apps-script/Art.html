@@ -1,0 +1,75 @@
+<script>
+/* Illustrations and motion. Everything is drawn in code, uses theme colours only (so it works in light and dark mode),
+   and is skipped for people who have asked their device for reduced motion. */
+const REDUCED=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const ICON={
+  book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  flag:'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+  shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  check:'<polyline points="20 6 9 17 4 12"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  refresh:'<polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/>',
+  spark:'<path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/>',
+  inbox:'<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  alert:'<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  star:'<polygon points="12 2 15.1 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 8.9 8.3 12 2"/>'
+};
+const ico=(n,sz)=>`<svg class="ic" viewBox="0 0 24 24" width="${sz||18}" height="${sz||18}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]||''}</svg>`;
+const TYPE_ICON={'Learning exposure':'book','Practice':'target','Demonstration':'eye','Final verification':'flag'};
+const STATUS_ICON={progress:'clock',submitted:'inbox',complete:'check',exempt:'check',partial:'spark',rework:'refresh'};
+const LOGO='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V11"/><path d="M12 11C12 7 9 5 5 5c0 4 2 6 7 6z"/><path d="M12 13c0-3 2-5 6-5 0 3-2 5-6 5z"/></svg>';
+
+/* ---- milestone medals: blue fading to red like the poster numerals, with a yellow ribbon ---- */
+const MEDAL_DEFS='<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="medalGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--hero-a)"/><stop offset="1" style="stop-color:var(--hero-b)"/></linearGradient></defs></svg>';
+function medal(icon,on){
+  return`<svg class="medal ${on?'on':'off'}" viewBox="0 0 64 74" width="64" height="74" aria-hidden="true"><path class="ribbon" d="M19 46l-6 24 13-6 6 8 4-27z"/><path class="ribbon r2" d="M45 46l6 24-13-6-6 8-4-27z"/><circle class="disc" cx="32" cy="30" r="27"/><circle class="rim" cx="32" cy="30" r="21.5"/><g class="glyph" transform="translate(20 18)" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor">${ICON[icon]||''}</g></svg>`;
+}
+
+/* ---- banner art: drifting white school doodles and a few yellow dots, as on the poster ---- */
+const DOODLE_NAMES=['book','target','spark','clock','flag','star','users','eye'];
+const HERO_BG=(()=>{
+  let tile='';
+  DOODLE_NAMES.forEach((n,i)=>{const x=22+(i%4)*58,y=26+Math.floor(i/4)*80+(i%2)*10,r=[-14,10,-6,16,8,-18,12,-8][i];
+    tile+=`<g transform="translate(${x} ${y}) rotate(${r} 12 12) scale(1.15)" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</g>`});
+  return'<svg class="hero-bg" viewBox="0 0 800 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><pattern id="doodlePat" width="240" height="160" patternUnits="userSpaceOnUse">'+tile+'</pattern></defs>'
+   +'<g class="doodles"><rect x="0" y="0" width="1300" height="260" fill="url(#doodlePat)" opacity=".16"/></g>'
+   +'<circle class="fl" cx="470" cy="38" r="7"/><circle class="fl f2" cx="610" cy="214" r="5"/><circle class="fl f3" cx="760" cy="70" r="6"/><circle class="ring" cx="640" cy="40" r="22"/><circle class="ring" cx="120" cy="226" r="16"/></svg>';
+})();
+
+/* ---- friendly empty states ---- */
+function emptyArt(kind){
+  const icon={
+    reviews:'<rect x="62" y="34" width="56" height="70" rx="9" class="line"/><path class="line" d="M78 34v-6h24v6"/><polyline class="line draw" points="76 70 86 80 106 58"/>',
+    seed:'<path class="line" d="M90 104V62"/><path class="line draw" d="M90 74C70 74 62 62 62 48C80 48 90 58 90 74Z"/><path class="line draw" d="M90 66C90 54 100 44 116 44C116 58 106 66 90 66Z"/>',
+    lock:'<rect x="64" y="62" width="52" height="40" rx="9" class="line"/><path class="line" d="M74 62V50a16 16 0 0 1 32 0v12"/><circle cx="90" cy="82" r="4" class="line"/>'
+  }[kind]||'';
+  return`<svg class="ea" viewBox="0 0 180 130" aria-hidden="true"><ellipse class="blob" cx="90" cy="68" rx="76" ry="54"/><g class="floaty">${icon}</g><circle class="acc" cx="26" cy="30" r="6"/><circle class="acc" cx="156" cy="40" r="4"/><circle class="acc" cx="146" cy="104" r="5"/></svg>`;
+}
+
+/* ---- confetti: a short burst, no library ---- */
+function celebrate(big){
+  if(REDUCED)return;
+  const c=document.createElement('canvas'),W=window.innerWidth,H=window.innerHeight;c.className='confetti';c.width=W;c.height=H;c.setAttribute('aria-hidden','true');document.body.appendChild(c);
+  const g=c.getContext('2d'),cols=['#0050A0','#0A62BA','#B02020','#F2C21A','#F5C928','#78B0FF','#FF8D95'],n=big?150:80,t0=performance.now(),life=big?3200:2400;
+  const ps=Array.from({length:n},()=>({x:W*(.25+Math.random()*.5),y:H*.32,vx:(Math.random()-.5)*10,vy:-Math.random()*12-4,s:5+Math.random()*6,r:Math.random()*6,vr:(Math.random()-.5)*.3,c:cols[Math.random()*cols.length|0]}));
+  (function f(t){const dt=t-t0;g.clearRect(0,0,W,H);
+    ps.forEach(p=>{p.vy+=.28;p.x+=p.vx;p.y+=p.vy;p.vx*=.995;p.r+=p.vr;g.save();g.translate(p.x,p.y);g.rotate(p.r);g.fillStyle=p.c;g.globalAlpha=Math.max(0,1-dt/life);g.fillRect(-p.s/2,-p.s/3,p.s,p.s*.6);g.restore()});
+    if(dt<life)requestAnimationFrame(f);else c.remove()})(t0);
+}
+
+/* ---- numbers that count up the first time a screen appears ---- */
+function countUp(){
+  document.querySelectorAll('[data-count]').forEach(el=>{
+    const to=+el.dataset.count,suf=el.dataset.suffix||'';if(REDUCED||!isFinite(to)){el.textContent=to+suf;return}
+    const t0=performance.now();el.textContent='0'+suf;
+    (function f(t){const k=Math.min(1,(t-t0)/800);el.textContent=Math.round(to*(1-Math.pow(1-k,3)))+suf;if(k<1)requestAnimationFrame(f)})(t0);
+  });
+}
+const greeting=()=>{const h=new Date().getHours();return h<12?'Good morning':h<17?'Good afternoon':'Good evening'};
+</script>
