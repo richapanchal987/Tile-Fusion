@@ -191,10 +191,13 @@ function cellLabel_(rows, r, c, caption, headRow) {
 /** Turns tables into what the app shows: title boxes become headings, empty response cells become answer boxes. */
 function shapeTables_(blocks, opt, seen, answers) {
   const out = [];
+  let caseName = '', cases = 0;                   // a case or scenario told in one table and answered in the next: boxes say which case
   blocks.forEach(b => {
     if (b.t !== 'table') { out.push(b); return; }
     const rows = (b.rows || []).filter(r => r.length);
     const texts = rows.map(r => r.map(cellText_));
+    const cm = /^((?:scenario|case)\s*(\d*))\s*:/i.exec((texts[0] || [''])[0]);
+    if (cm) { cases++; caseName = cm[2] ? flat_(cm[1]) : cm[1].trim() + ' ' + cases; }
     if (!rows.length || texts.every(r => r.every(t => !t))) return;                       // an empty table: leave it out
     if (opt.dropTables && opt.dropTables.some(p => texts.some(r => r.some(t => lower_(t).indexOf(lower_(p)) === 0)))) return;
     if (opt.toInstructions) {                                                             // keep only the instructions written in the header
@@ -207,7 +210,10 @@ function shapeTables_(blocks, opt, seen, answers) {
     else if (rows[0].length === 1 && rows.length > 1 && texts[0][0] && texts[0][0].length <= 80 && /^[^a-z]*$/.test(texts[0][0])) { caption = texts[0][0]; body = rows.slice(1); }
     const newRows = body.map((row, r) => row.map((cell, c) => {
       if (!opt.answers || cellText_(cell)) return cell;
-      const label = cellLabel_(body, r, c, caption, headRow), single = body.every(x => x.length === 1);
+      let label = cellLabel_(body, r, c, caption, headRow);
+      const single = body.every(x => x.length === 1);
+      label = label.replace(/^your task\s*—\s*/i, '').replace(/\s*—\s*(your )?response$/i, '');
+      if (caseName && !cm && !/^(scenario|case)\b/i.test(label)) label = caseName + ' — ' + label;
       const a = { t: 'ans', key: uniqueKey_(seen, 'a-' + hashKey_(label)), label: label, rows: single ? 6 : 3, show: false };
       answers.push({ key: a.key, label: label });
       const cellOut = [a];

@@ -25,6 +25,7 @@ function applyTeamChangesOct2026() {
     '5.1': { evidence: 'Completed worksheet/activity' },
     '5.2': { evidence: 'Dummy Session Plan', timeline: true },
     '6.2': { evidence: '' },
+    '7.1': { name: 'Student Communication' },
     '7.4': { traineeName: 'RMC' }
   };
   const db = readDb_(), done = [];

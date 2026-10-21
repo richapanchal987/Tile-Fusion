@@ -118,5 +118,11 @@ t('answer box labels and hints from the doc are escaped', () => {
   const [s] = conv([title('Talk'), table([['<b onmouseover=x>"Q"</b>', 'A'], ['One', '']])]);
   const h = s.parts.join(''); assert.ok(!h.includes('<b onmouseover') && !/data-l="[^"]*"Q/.test(h));
 });
+t('a case told in one table and answered in the next: each box says which case it belongs to', () => {
+  const [s] = conv([title('Talk'), table([['Case 1: A student stops coming'], ['Details']]), table([['Your Task'], ['What would you do?'], ['']]),
+    table([['Case: Academic support is not enough'], ['Details']]), table([['Your Task'], ['What would you do?'], ['']])]);
+  assert.strictEqual(s.answers.map(x => x.label).join('|'), 'Case 1 — What would you do?|Case 2 — What would you do?');
+  assert.notStrictEqual(s.answers[0].key, s.answers[1].key);
+});
 
 console.log('\n' + n + ' tests passed');

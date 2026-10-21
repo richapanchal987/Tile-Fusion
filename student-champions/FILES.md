@@ -21,10 +21,10 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `Art.html` | HTML | `Art` | 75 | 7 KB | `</script>` |
 | `Code.gs` | Script (.gs) | `Code` | 292 | 16 KB | `}` |
 | `Config.gs` | Script (.gs) | `Config` | 19 | 8 KB | `};` |
-| `DocSync.gs` | Script (.gs) | `DocSync` | 440 | 23 KB | `}` |
+| `DocSync.gs` | Script (.gs) | `DocSync` | 446 | 23 KB | `}` |
 | `Index.html` | HTML | `Index` | 26 | 1 KB | `</html>` |
 | `Logic.gs` | Script (.gs) | `Logic` | 445 | 23 KB | `}` |
-| `Migrate.gs` | Script (.gs) | `Migrate` | 47 | 3 KB | `}` |
+| `Migrate.gs` | Script (.gs) | `Migrate` | 48 | 3 KB | `}` |
 | `SeedData.gs` | Script (.gs) | `SeedData` | 57 | 21 KB | `};` |
 | `SeedRubrics.gs` | Script (.gs) | `SeedRubrics` | 18 | 6 KB | `const SEED_RUBRIC_PARTS = () => [SEED_RUBRICS_1, SEED_RUBRICS_2, SEED_` |
 | `SeedRubrics1.gs` | Script (.gs) | `SeedRubrics1` | 126 | 19 KB | `];` |

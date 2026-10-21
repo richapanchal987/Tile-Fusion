@@ -66,7 +66,7 @@ A person can hold any combination: the Staff table has a role (Mentor/TL or Admi
 | 4 Observations | 6% | 60% | 4.1 EY/PYP/MLC (5), 4.2 MYP (5), 4.3 DP (6), 4.4 SC meetings (6), 4.5 Parent meetings (6), 4.6 Graduation Presentation (6) |
 | 5 Learning through Guided Application | 12% | 60% | 5.1 Worksheet / Activity (7), 5.2 Dummy Session (7) |
 | 6 Applied Practice & Case Simulation | 24% | 70% | 6.1 Case Simulation (8), 6.2 Conversation Framework (8), 6.3 Understanding the Student (8), 6.4 Student Meeting (9), 6.5 Academic Accountability (9) |
-| 7 Collaboration & Communication | 17% | 70% | 7.1 P-T-S (10), 7.2 Teacher Communication (10), 7.3 Parent Communication (10), 7.4 Referral Mapping Cases (11), 7.5 Case Conference (11) |
+| 7 Collaboration & Communication | 17% | 70% | 7.1 Student Communication (10), 7.2 Teacher Communication (10), 7.3 Parent Communication (10), 7.4 Referral Mapping Cases (11), 7.5 Case Conference (11) |
 | 8 Final Readiness & Portfolio | 12% | 60% | 8.1 Viva (12), 8.2 Graduation Presentation (13) |
 
 - **Phases belong to modules:** Foundation (1-2), Skill Development (3-5), Applied Practice (6-7), Final Readiness (8). A cycle that holds tasks from two phases takes the phase of its first task.

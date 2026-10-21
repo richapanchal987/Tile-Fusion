@@ -16,7 +16,7 @@ const sel = (p, s) => p.locator(s);
     const task = async (who, cyc, name, opt) => { const q = await open(browser, who, scheme, opt); if (cyc) await q.locator(`.node[data-c="${cyc}"]`).click(); await q.locator('.task', { hasText: name }).locator('summary').first().click(); await q.locator('.tbody').first().waitFor(); await q.waitForTimeout(400); return q; };
     p = await task('bina@fsksurat.in', 1, 'Case Studies 01'); await snap(p, 'answers', true); await p.context().close();
     p = await task('devi@fsksurat.in', 2, 'SC Practice Principles'); await snap(p, 'principles', true); await p.context().close();
-    p = await task('devi@fsksurat.in', 10, 'P-T-S'); await snap(p, 'pts', true); await p.context().close();
+    p = await task('devi@fsksurat.in', 10, 'Student Communication'); await snap(p, 'pts', true); await p.context().close();
     p = await task('bina@fsksurat.in', 7, 'Dummy Session'); await snap(p, 'timeline', true); await p.context().close();
     p = await open(browser, 'tl@fsksurat.in', scheme); await p.locator('.tab', { hasText: 'Trainee' }).click(); await p.locator('select[data-act=pick]').selectOption('bina@fsksurat.in');
     await p.locator('.node[data-c="1"]').click(); await p.locator('.task', { hasText: 'Case Studies 01' }).locator('summary').first().click(); await p.locator('.ans.ro').first().waitFor(); await snap(p, 'staff-answers', true); await p.context().close();
