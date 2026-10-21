@@ -8,8 +8,9 @@ function download(name,rows){
   document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
 }
 function exportTracker(tr){
-  const rows=[[WD.Cycle,'Phase','Module','Task ID','Task','Type','Critical gate','Status','Score /4','Critical error','Due date','AI tools','Assessed by','Date assessed','Feedback','Evidence link','Files']];
-  D.tasks.filter(t=>t.active).forEach(t=>{const p=P(tr,t.id);rows.push(['C'+t.cycle,t.phase,topicOf(t.topic).name,t.id,t.name,t.type,t.gate?'Yes':'No',STATUS[p.status],p.score||'',p.critical||'',p.due||'',D.config.aiOptions[aiKey(t,p)][0],p.assessor||'',p.date||'',p.feedback||'',p.evidence||'',(p.files||[]).map(f=>f.name).join('; ')])});
+  const staff=isStaff();   // critical gates are for mentors, TLs and admins only
+  const rows=[[WD.Cycle,'Phase','Module','Task ID','Task','Type'].concat(staff?['Critical gate']:[],['Status','Score /4','Critical error','Due date','AI tools','Assessed by','Date assessed','Feedback','Document link','Files','Answer boxes filled','Reflection questions answered'])];
+  D.tasks.filter(t=>t.active).forEach(t=>{const p=P(tr,t.id);rows.push(['C'+t.cycle,t.phase,topicOf(t.topic).name,t.id,t.name,t.type].concat(staff?[t.gate?'Yes':'No']:[],[STATUS[p.status],p.score||'',p.critical||'',p.due||'',D.config.aiOptions[aiKey(t,p)][0],p.assessor||'',p.date||'',p.feedback||'',p.evidence||'',(p.files||[]).map(f=>f.name).join('; '),(p.answered||0)+' of '+(t.nAnswers||0),(p.reflected||0)+' of '+(t.refl||[]).length]))});
   download('tracker-'+tr.name.replace(/\W+/g,'-')+'.csv',rows);
 }
 function exportTeam(){

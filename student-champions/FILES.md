@@ -14,7 +14,7 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `AppAssess.html` | HTML | `AppAssess` | 80 | 8 KB | `</script>` |
 | `AppCore.html` | HTML | `AppCore` | 128 | 11 KB | `</script>` |
 | `AppEvents.html` | HTML | `AppEvents` | 123 | 10 KB | `</script>` |
-| `AppFiles.html` | HTML | `AppFiles` | 87 | 7 KB | `</script>` |
+| `AppFiles.html` | HTML | `AppFiles` | 88 | 8 KB | `</script>` |
 | `AppTeam.html` | HTML | `AppTeam` | 52 | 8 KB | `</script>` |
 | `AppTrainee.html` | HTML | `AppTrainee` | 212 | 23 KB | `</script>` |
 | `AppWork.html` | HTML | `AppWork` | 137 | 11 KB | `</script>` |

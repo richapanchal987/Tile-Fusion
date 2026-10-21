@@ -52,6 +52,9 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     await p.locator('.ready [data-act=cert-more]').click(); assert.strictEqual(await p.locator('.ready p').count(), before, 'and it can be closed again');
     assert.strictEqual(await p.locator('.tab').count(), 2, 'a trainee sees only My training and Guide');
     assert.strictEqual(await p.locator('.assessform, .planbox').count(), 0, 'no assessor controls for a trainee');
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.locator('[data-act=export-tracker]').click()]);
+    const csv = fs.readFileSync(await dl.path(), 'utf8');
+    assert.ok(!/Critical gate|Referral Mapping/.test(csv) && csv.includes('Document link') && csv.includes('Reflection questions answered'), 'the downloaded tracker has no staff-only columns or names');
     await p.screenshot({ path: path.join(shots, '1-trainee-home.png'), fullPage: true });
     assert.deepStrictEqual(p.errors, []); await p.context().close();
   });
