@@ -1,0 +1,111 @@
+<script>
+'use strict';
+/* Shared pieces: data, helpers, the page shell and the router. Screens are in AppTrainee, AppTeam and AppAdmin. */
+const SCALE = { 1: 'Not yet competent', 2: 'Developing', 3: 'Competent', 4: 'Proficient' };
+const STATUS = { locked: 'Locked', soon: 'Coming soon', notstarted: 'Not started', progress: 'In progress', submitted: 'Awaiting review', passed: 'Passed', rework: 'Rework needed', failed: 'Attempts used' };
+const STATUS_CHIP = { locked: '', soon: '', notstarted: '', progress: 'warn', submitted: 'warn', passed: 'good', rework: 'bad', failed: 'bad' };
+const READY_SHORT = { 'Not Cleared': 'Not cleared', 'Supervised Practice': 'Supervised practice', Independent: 'Independent' };
+let D = null, busy = false;
+const UI = { view: null, tid: null, task: null, filter: 'all', ms: 0, q: '', att: null, edit: null, tab: {}, draft: {}, importInfo: null, history: null };
+
+/* ---------- helpers ---------- */
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const isUrl = u => /^https?:\/\//i.test(u || '');
+const fmtDate = d => { if (!d) return ''; try { return new Date(String(d).slice(0, 10) + 'T00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return d; } };
+const fmtShort = d => { if (!d) return ''; try { return new Date(d + 'T00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); } catch (e) { return d; } };
+const mb = n => n < 1024 ? n + ' B' : n < 1048576 ? Math.round(n / 1024) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+const link = (u, label) => isUrl(u) ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(label || u)}</a>` : esc(u);
+const para = s => s ? `<p style="white-space:pre-line">${esc(s)}</p>` : '';
+const chip = (text, kind) => `<span class="chip ${kind || ''}">${esc(text)}</span>`;
+const meter = (label, a, b, extra) => `<div class="meter"><div class="lab"><span>${label}</span><b>${a} of ${b}${extra || ''}</b></div><div class="track" role="progressbar" aria-valuemin="0" aria-valuemax="${b}" aria-valuenow="${a}"><i style="width:${b ? Math.round(a / b * 100) : 0}%"></i></div></div>`;
+const pageBanner = (title, sub) => `<section class="banner">${HERO_BG}<span class="accent-bar"></span><span class="accent-dot"></span><h1>${esc(title)}</h1>${sub ? `<p class="hero-sub">${esc(sub)}</p>` : ''}</section>`;
+const tiles = list => `<div class="tiles">${list.map(([ic, n, l, k]) => `<div class="tile ${k || ''}"><span class="ti">${ico(ic, 22)}</span><div><div class="tn" data-count="${n}">${n}</div><div class="tl">${l}</div></div></div>`).join('')}</div>`;
+const field = (label, input, hint) => `<label class="field"><span>${label}</span>${input}${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
+const opts = (list, cur, blank) => (blank ? `<option value="">${blank}</option>` : '') + list.map(x => { const v = Array.isArray(x) ? x[0] : x, l = Array.isArray(x) ? x[1] : x; return `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(l)}</option>`; }).join('');
+const val = id => { const e = document.getElementById(id); return e ? (e.type === 'checkbox' ? e.checked : e.value) : ''; };
+const kind = () => D && D.me ? D.me.kind : 'none';
+const taskTitle = id => { const t = (D.tasks || D.catalogue || []).find(x => x.id === id); return t ? t.title : id; };
+
+function call(fn, ...args) { return new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args)); }
+function toast(msg, err) { const t = $('#toast'); t.textContent = msg; t.className = 'toast show' + (err ? ' err' : ''); clearTimeout(t._h); t._h = setTimeout(() => { t.className = 'toast'; }, err ? 7000 : 2600); }
+
+/** Runs a server action that returns a fresh bootstrap, then redraws. */
+async function run(fn, args, ok, after) {
+  if (busy) return;
+  busy = true; document.body.classList.add('busy');
+  try { const r = await call(fn, ...args); setData(r); if (after) after(r); if (ok) toast(ok); }
+  catch (e) { toast((e && e.message) || String(e), true); }
+  finally { busy = false; document.body.classList.remove('busy'); render(); }
+}
+function setData(d) {
+  if (!d || !d.me) return;
+  D = d; UI.history = null;
+  if (kind() === 'trainee') { if (!UI.view) UI.view = 'home'; }
+  else if (kind() === 'tl') { if (!UI.view) UI.view = 'team'; if (!UI.tid || !D.trainees.some(t => t.record.email === UI.tid)) UI.tid = (D.trainees[0] || { record: {} }).record.email; }
+  else if (kind() === 'coord') { if (!UI.view) UI.view = 'confirm'; }
+  else if (!UI.view) UI.view = 'clear';
+}
+
+/* ---------- shell ---------- */
+function tabsFor() {
+  const k = kind();
+  if (k === 'trainee') return [['home', 'Home'], ['tasks', 'Tasks'], ['toolkit', 'Toolkit'], ['policies', 'Policies'], ['behaviour', 'My progress']];
+  if (k === 'tl') return [['team', 'Team'], ['reviews', 'Reviews'], ['trainee', 'Trainee'], ['catalogue', 'Task list'], ['flags', 'Safety flags']];
+  if (k === 'coord') return [['confirm', 'Confirmations'], ['team', 'Trainees'], ['admin', 'Admin'], ['history', 'History']];
+  return [['clear', 'Clearance']];
+}
+function render() {
+  const app = $('#app');
+  if (!D) { app.innerHTML = `<div class="center">${emptyArt('seed')}<h2>Loading</h2><p class="muted">One moment.</p></div>`; return; }
+  if (kind() === 'none') { app.innerHTML = `<div class="center">${emptyArt('lock')}<h1>You are not enrolled yet</h1><p class="muted">You are signed in as ${esc(D.me.email || 'an unknown account')}. Ask the Campus Operations Coordinator to enrol you, then reload this page.</p></div>`; return; }
+  const v = UI.view, tabs = tabsFor(), pend = kind() === 'tl' ? pendingReviews().length : kind() === 'coord' ? D.confirmations.filter(c => c.rated && !c.processConfirmed).length : 0;
+  const body = { home: vHome, tasks: vTasks, task: vTask, toolkit: vToolkit, policies: vPolicies, behaviour: vMyProgress, team: vTeam, reviews: vReviews, trainee: vTraineeProfile, catalogue: vCatalogue, flags: vFlags,
+                 confirm: vConfirm, admin: vAdmin, history: vHistory, clear: vClear }[v] || vHome;
+  app.innerHTML = `${MEDAL_DEFS}
+  <header class="top"><div class="top-in">
+    <div class="brand"><span class="logo">${LOGO}</span><span>${esc(D.config.appName)}<small>${esc(D.config.orgName)}</small></span></div>
+    <nav class="tabs" aria-label="Sections">${tabs.map(([k, l]) => `<button class="tab" data-act="view" data-v="${k}" ${(v === k || (v === 'task' && k === 'tasks')) ? 'aria-current="page"' : ''}>${l}${(k === 'reviews' || k === 'confirm') && pend ? `<span class="count">${pend}</span>` : ''}</button>`).join('')}</nav>
+    <span class="who-chip">${esc(D.me.name || D.me.email)}, ${esc(D.me.role)}</span>
+  </div></header>
+  <main>${D.readOnly ? `<div class="note">Your training record is closed and read-only. You can still read everything.</div>` : ''}${body()}</main>`;
+  if (!UI.introDone) { UI.introDone = true; document.body.classList.add('intro'); countUp(); setTimeout(() => document.body.classList.remove('intro'), 1700); }
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || busy) return;
+  const a = b.dataset.act;
+  if (ACTIONS[a]) { e.preventDefault(); ACTIONS[a](b); }
+});
+document.addEventListener('input', e => {                       // keep what people type when the page redraws
+  const el = e.target; if (el.dataset && el.dataset.draft) UI.draft[el.dataset.draft] = el.type === 'checkbox' ? el.checked : el.value;
+});
+document.addEventListener('change', e => {
+  const el = e.target; if (el.dataset && el.dataset.draft) UI.draft[el.dataset.draft] = el.type === 'checkbox' ? el.checked : el.value;
+  const a = el.dataset && el.dataset.change; if (a && ACTIONS[a]) ACTIONS[a](el);
+});
+const dv = (key, fb) => key in UI.draft ? UI.draft[key] : fb;
+const df = key => `data-draft="${esc(key)}"`;
+
+const ACTIONS = {
+  view: b => { UI.view = b.dataset.v; UI.task = null; render(); window.scrollTo(0, 0); },
+  open: b => { UI.task = b.dataset.t; UI.view = 'task'; render(); window.scrollTo(0, 0); },
+  back: () => { UI.view = 'tasks'; UI.task = null; render(); },
+  filter: b => { UI.filter = b.value; render(); },
+  msfilter: b => { UI.ms = +b.value; render(); },
+  search: b => { UI.q = b.value; const pos = b.selectionStart; render(); const i = $('#q'); if (i) { i.focus(); i.setSelectionRange(pos, pos); } },
+  openfile: async b => {
+    try { busy = true; const f = await call('getEvidenceFile', b.dataset.a, b.dataset.fid), bin = atob(f.data), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([u8], { type: f.mime })), a = document.createElement('a'); a.href = url; a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err) { toast(err.message || String(err), true); } finally { busy = false; }
+  }
+};
+function start() {
+  const bad = e => { $('#app').innerHTML = `<div class="center">${emptyArt('lock')}<h1>Something went wrong</h1><p class="muted">${esc((e && e.message) || e)}</p></div>`; };
+  render();
+  call('getBootstrap').then(d => { setData(d); render(); }).catch(bad);
+}
+</script>

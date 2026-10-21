@@ -1,0 +1,142 @@
+<script>
+/* Trainee screens: Home, Tasks, one task, Toolkit, Policies, My progress. */
+
+const lockReason = r => r.kind === 'prereq' ? 'Pass these first: ' + r.tasks.map(x => esc(x.id) + ' ' + esc(x.title)).join(', ')
+  : r.kind === 'milestone' ? 'Finish Milestones 1 to 3 first (' + r.left + ' task' + (r.left === 1 ? '' : 's') + ' left)'
+  : r.kind === 'supervised' ? 'Opens when your Team Leader confirms you for Supervised Practice' : '';
+const dueText = t => !t.due ? '' : (t.status === 'passed' ? '' : (t.overdue ? 'Overdue, was due ' : 'Due ') + fmtShort(t.due));
+const statusChip = t => chip(t.status === 'submitted' && t.underReview ? 'Under review' : STATUS[t.status], STATUS_CHIP[t.status]);
+const myTask = id => D.tasks.find(t => t.id === id);
+
+function vHome() {
+  const c = D.calc, tr = D.trainee, p = c.progress, ready = c.ready.map(myTask).filter(Boolean).slice(0, 5);
+  const unseen = D.attempts.filter(a => a.status === 'Rated' && a.released && !a.seen);
+  const stale = D.policies.filter(x => !x.acknowledged || x.stale);
+  const sup = tr.caseReadiness;
+  return `${pageBanner(greeting() + ', ' + tr.name.split(' ')[0], c.cycle >= 1 && c.cycle <= D.settings.cycles ? 'You are in cycle ' + c.cycle + ' of ' + D.settings.cycles + '. Your readiness: ' + READY_SHORT[sup] + '.' : c.cycle < 1 ? 'Your training starts on ' + fmtDate(tr.start) + '.' : 'You have reached the end of the programme calendar.')}
+  ${tiles([['check', p.passed, 'tasks passed of ' + p.total, ''], ['calendar', Math.max(c.cycle, 0), 'current cycle', ''], ['alert', c.overdue.length, 'overdue', c.overdue.length ? 'warn' : ''], ['clock', c.dueSoon.length, 'due soon', ''] ])}
+  ${unseen.length ? `<section class="changes" aria-label="New feedback"><div class="hd"><h3>${ico('inbox')} New feedback</h3></div><ul>${unseen.map(a => `<li class="${a.flag ? 'bad' : a.reworkRequired ? 'warn' : 'good'}"><span class="badge">${ico(a.flag ? 'flag' : 'check', 14)}</span><span><b>${esc(a.task)} ${esc(taskTitle(a.task))}</b>: ${a.reworkRequired ? 'needs another attempt' : 'rated'}${a.score !== '' ? ', score ' + esc(a.score) : ''}. <button class="btn ghost small" data-act="open" data-t="${esc(a.task)}">Read</button></span></li>`).join('')}</ul></section>` : ''}
+  <div class="cols"><div>
+    <h2 class="sechead">Your milestones</h2>
+    <div class="card">${D.milestones.map(m => { const bm = p.byMilestone.find(x => x.milestone === m.n) || {}; return meter('Milestone ' + m.n + (m.focus ? ': ' + esc(m.focus) : ''), bm.passed || 0, bm.total || 0, bm.due ? ' · by ' + fmtShort(bm.due) : ''); }).join('')}
+      <p class="hint">Each milestone has a deadline cycle. Plan your week around the due dates shown on your tasks.</p></div>
+    <h2 class="sechead">Ready now</h2>
+    ${ready.length ? `<ul class="tasklist">${ready.map(t => `<li><button class="linkbtn" data-act="open" data-t="${esc(t.id)}">${esc(t.id)} ${esc(t.title)}</button> ${statusChip(t)} <span class="hint">${dueText(t)}</span></li>`).join('')}</ul>` : `<p class="muted">Nothing is waiting for you right now.</p>`}
+  </div><aside>
+    <div class="card"><h3>${ico('shield')} Policies</h3>${stale.length ? `<p>${stale.length} to read and acknowledge.</p><button class="btn small" data-act="view" data-v="policies">Open policies</button>` : `<p class="muted">All acknowledged.</p>`}</div>
+    <div class="card"><h3>${ico('star')} Your readiness</h3><p><b>${esc(READY_SHORT[sup])}</b></p>${tr.decision !== 'Pending' ? `<p class="hint">Clearance decision: ${esc(tr.decision)}${tr.conditions ? '. ' + esc(tr.conditions) : ''}</p>` : ''}</div>
+  </aside></div>`;
+}
+
+function vTasks() {
+  const list = D.tasks.filter(t => (!UI.ms || t.milestone === UI.ms) && (UI.filter === 'all' || (UI.filter === 'todo' ? ['notstarted', 'progress', 'rework'].indexOf(t.status) > -1 : t.status === UI.filter))
+    && (!UI.q || (t.id + ' ' + t.title).toLowerCase().indexOf(UI.q.toLowerCase()) > -1));
+  const groups = [1, 2, 3, 4].filter(m => list.some(t => t.milestone === m));
+  return `${pageBanner('Your tasks', 'Locked tasks open when you pass what comes before them.')}
+  <div class="panel"><div class="formgrid">
+    ${field('Milestone', `<select data-change="msfilter" aria-label="Milestone">${opts([[0, 'All'], [1, 'Milestone 1'], [2, 'Milestone 2'], [3, 'Milestone 3'], [4, 'Milestone 4']], UI.ms)}</select>`)}
+    ${field('Show', `<select data-change="filter" aria-label="Status">${opts([['all', 'Everything'], ['todo', 'To do'], ['submitted', 'Awaiting review'], ['passed', 'Passed'], ['locked', 'Locked']], UI.filter)}</select>`)}
+    ${field('Search', `<input id="q" type="search" value="${esc(UI.q)}" data-change="search" placeholder="Task ID or title">`)}
+  </div></div>
+  ${groups.map(m => `<h2 class="sechead">Milestone ${m}</h2>` + list.filter(t => t.milestone === m).map(t => `<button class="task rowbtn" data-act="open" data-t="${esc(t.id)}" aria-label="${esc(t.id + ' ' + t.title + ', ' + STATUS[t.status])}" style="--pc:var(--p${m})">
+      <span class="tid">${esc(t.id)}</span><span class="tname">${t.status === 'locked' ? ico('lock', 15) + ' ' : ''}${esc(t.title)}</span>${statusChip(t)}
+      <span class="ttopic">${esc(t.strand)}${t.gate ? ' · ' + chip('Critical gate', 'bad') : ''}${dueText(t) ? ' · ' + (t.overdue ? '<b>' + dueText(t) + '</b>' : dueText(t)) : ''}</span></button>`).join('')).join('') || `<p class="muted">No tasks match.</p>`}`;
+}
+
+function filesHtml(files, attemptId, removable, taskId) {
+  return files.length ? `<ul class="files">${files.map(f => `<li><div class="filerow"><span>${esc(f.name)} <span class="hint">${mb(f.size)}</span></span><button class="btn small" data-act="openfile" data-a="${esc(attemptId)}" data-fid="${esc(f.id)}">Download</button>${removable ? `<button class="btn ghost small" data-act="rmfile" data-t="${esc(taskId)}" data-fid="${esc(f.id)}">Remove</button>` : ''}</div></li>`).join('')}</ul>` : '';
+}
+
+function attemptCard(a) {
+  const head = `<h4>Attempt ${a.no}${a.version ? ' (Version ' + esc(a.version) + ')' : ''} · ${fmtDate((a.submitted || '').slice(0, 10))}</h4>`;
+  let body;
+  if (a.status === 'Submitted') body = `<p>${chip('Awaiting review', 'warn')}</p>`;
+  else if (a.underReview) body = `<p>${chip('Under review', 'warn')} <span class="hint">Your Team Leader has looked at this. The rating is shown once they release it.</span></p>`;
+  else body = `<p>${a.flag ? chip('Safety flag', 'bad') + ' ' : ''}${a.score !== '' ? chip('Score: ' + a.score, a.reworkRequired ? 'bad' : 'good') : ''} ${a.reworkRequired ? chip('Rework needed' + (a.reworkDue ? ' by ' + fmtShort(a.reworkDue) : ''), 'bad') : ''}</p>
+      ${a.flagNote ? `<div class="note"><b>Safety flag:</b> ${esc(a.flagNote)}</div>` : ''}${a.feedback ? `<div class="note"><b>Feedback:</b> ${esc(a.feedback)}</div>` : ''}${a.goal ? `<div class="note"><b>Development goal:</b> ${esc(a.goal)}</div>` : ''}
+      ${a.processConfirmed ? `<p class="hint">Process ${a.processConfirmed === 'Yes' ? 'confirmed' : 'not confirmed'} by the Campus Operations Coordinator.${a.processNote ? ' ' + esc(a.processNote) : ''}</p>` : ''}`;
+  return `<div class="card">${head}${body}${a.evidence ? `<p>Evidence: ${link(a.evidence)}</p>` : ''}${filesHtml(a.files, a.id, false)}${a.reflection ? `<details><summary>Your reflection</summary>${para(a.reflection)}</details>` : ''}</div>`;
+}
+
+function vTask() {
+  const t = myTask(UI.task); if (!t) { UI.view = 'tasks'; return vTasks(); }
+  const mine = D.attempts.filter(a => a.task === t.id), draft = mine.find(a => a.status === 'Draft'), done = mine.filter(a => a.status !== 'Draft').sort((x, y) => y.no - x.no);
+  const k = t.id + ':', ro = D.readOnly;
+  let top = `<button class="btn ghost small" data-act="back">${ico('refresh', 14)} All tasks</button>
+  <section class="banner" style="margin-top:12px">${HERO_BG}<span class="accent-bar"></span><span class="accent-dot"></span><p class="eyebrow">${esc(t.id)} · Milestone ${t.milestone} · ${esc(t.strand)}</p><h1>${esc(t.title)}</h1></section>
+  <div class="row" style="margin:12px 0">${statusChip(t)}${t.gate ? chip('Critical gate', 'bad') : ''}${t.pathway === 'Show quickly' ? chip('Show quickly', 'good') : ''}${t.ageBand ? chip(t.ageBand) : ''}${t.effort ? chip('About ' + t.effort + ' hours') : ''}${dueText(t) ? chip(dueText(t), t.overdue ? 'bad' : '') : ''}${t.used ? chip(t.used + ' of ' + t.maxAttempts + ' attempts used') : ''}</div>`;
+  if (t.status === 'locked') return top + `<div class="card"><h3>${ico('lock')} This task is locked</h3>${t.reasons.map(r => `<p>${lockReason(r)}</p>`).join('')}</div>`;
+  if (t.status === 'soon') return top + `<div class="card"><h3>${ico('clock')} Coming soon</h3><p>This task is not ready yet. The Team Leaders are finishing the content, so you cannot start it for now.</p></div>`;
+  const links = (t.refLinks || '').split(/[\n,; ]+/).filter(isUrl);
+  const learn = `<div class="card"><h3>${ico('book')} Learn</h3>${t.inApp ? para(t.inApp) : ''}${t.learn ? para(t.learn) : ''}${!t.inApp && !t.learn ? '<p class="muted">Use the links below.</p>' : ''}
+    ${t.traineeLink ? `<p>${link(t.traineeLink, 'Open the learning content')}</p>` : ''}${t.refs ? `<h4>References</h4>${para(t.refs)}` : ''}${links.length ? `<ul class="tasklist">${links.map(u => `<li>${link(u)}</li>`).join('')}</ul>` : ''}
+    ${t.toolkit ? `<p class="hint">Toolkit: ${esc(t.toolkit)}</p>` : ''}</div>`;
+  const doIt = `<div class="card"><h3>${ico('target')} Do</h3>${para(t.what)}${t.bestDoneOn ? `<p class="hint">Best done on: ${esc(t.bestDoneOn)}</p>` : ''}${t.evidenceDesc ? `<h4>Evidence</h4>${para(t.evidenceDesc)}` : ''}
+    <h4>How it is rated</h4><p>${esc(t.ratingMethod)}${t.passMark ? ', pass mark ' + esc(t.passMark) : ''}${t.assessorRole ? '. Assessed by: ' + esc(t.assessorRole) : ''}.</p>${t.competency ? para(t.competency) : ''}${t.anchor ? `<details><summary>Rating anchor</summary>${para(t.anchor)}</details>` : ''}${t.rubricLink ? `<p>${link(t.rubricLink, 'Open the rubric')}</p>` : ''}
+    ${ro || t.status === 'passed' ? '' : `<div class="formgrid">${field('Plan to do this on', `<input type="date" value="${esc(t.planned)}" data-change="plan" data-t="${esc(t.id)}">`, 'Only a reminder for you.')}</div>`}</div>`;
+  let submit = '';
+  if (t.status === 'passed') submit = `<div class="card"><h3>${ico('check')} Passed</h3><p>Best score: ${esc(t.best == null ? 'Complete' : t.best)}.</p></div>`;
+  else if (t.status === 'submitted') submit = `<div class="card"><h3>${ico('clock')} Waiting for review</h3><p>Your latest attempt is with your Team Leader. You will see the rating here once it is released.</p></div>`;
+  else if (t.status === 'failed') submit = `<div class="card"><h3>${ico('alert')} All attempts used</h3><p>Please speak to your Team Leader about the next step.</p></div>`;
+  else if (t.ratingMethod && /not pass/i.test(t.ratingMethod)) submit = `<div class="card"><h3>${ico('check')} Placement check</h3><p>This is not a pass or fail task. Your Team Leader records it in your entry check.</p></div>`;
+  else if (!ro && t.canSubmit) {
+    const dr = draft || { evidence: '', files: [], reflection: '', question: '', hours: null };
+    submit = `<div class="card"><h3>${ico('inbox')} Submit${t.used ? ' attempt ' + (t.used + 1) + ' (Version ' + t.nextVersion + ')' : ''}</h3>
+    ${t.used ? `<p class="note">This is a rework. Your Team Leader will give you Version ${esc(t.nextVersion)} of the scenario.</p>` : ''}
+    <div class="note"><b>Before you submit:</b> remove names and anything that could identify a student. Do not upload audio or video of real students. Write about the work, not the child.</div>
+    <div class="formgrid">${field('Evidence link (Google Drive or other)', `<input type="url" ${df(k + 'ev')} value="${esc(dv(k + 'ev', dr.evidence))}" placeholder="https://">`)}
+      ${field('Hours this took', `<input type="number" min="0" max="200" step="0.5" ${df(k + 'hrs')} value="${esc(dv(k + 'hrs', dr.hours == null ? '' : dr.hours))}">`, 'A rough figure is fine.')}</div>
+    <div class="field"><span>Or upload a file (PDF, Office, text or image, up to ${D.settings.maxUploadMb} MB)</span><input type="file" data-change="upload" data-t="${esc(t.id)}" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.csv,.png,.jpg,.jpeg,.gif,.webp" aria-label="Upload evidence"></div>
+    ${filesHtml(dr.files || [], dr.id || '', true, t.id)}
+    ${field('Reflection', `<textarea rows="5" ${df(k + 'ref')}>${esc(dv(k + 'ref', dr.reflection))}</textarea>`, 'What you did, what you noticed, what you would do differently.')}
+    ${field('A question for your Team Leader (optional)', `<textarea rows="2" ${df(k + 'q')}>${esc(dv(k + 'q', dr.question))}</textarea>`)}
+    <label class="row"><input type="checkbox" ${df(k + 'anon')} ${dv(k + 'anon', false) ? 'checked' : ''}> <span>I confirm that this evidence is anonymised and contains no student information.</span></label>
+    <div class="row"><button class="btn" data-act="submit" data-t="${esc(t.id)}">Submit for review</button><button class="btn ghost" data-act="savedraft" data-t="${esc(t.id)}">Save draft</button></div></div>`;
+  }
+  return top + `<div class="cols"><div>${doIt}${submit}</div><aside>${learn}${done.length ? `<h3 class="sechead">Your attempts</h3>${done.map(attemptCard).join('')}` : ''}</aside></div>`;
+}
+
+const draftFields = id => ({ evidence: val0(id + ':ev'), hours: val0(id + ':hrs'), reflection: val0(id + ':ref'), question: val0(id + ':q'), anon: !!UI.draft[id + ':anon'] });
+const val0 = k => { const e = document.querySelector('[data-draft="' + k.replace(/"/g, '\\"') + '"]'); return e ? (e.type === 'checkbox' ? e.checked : e.value) : (UI.draft[k] === undefined ? undefined : UI.draft[k]); };
+const clearDraft = id => Object.keys(UI.draft).forEach(k => { if (k.indexOf(id + ':') === 0) delete UI.draft[k]; });
+const openCore = ACTIONS.open;
+Object.assign(ACTIONS, {
+  open: b => { openCore(b); if (D.attempts.some(a => a.task === b.dataset.t && a.status === 'Rated' && a.released && !a.seen)) { call('markSeen', b.dataset.t).then(d => { D = d; }).catch(() => {}); } },
+  savedraft: b => run('saveDraft', [b.dataset.t, draftFields(b.dataset.t)], 'Draft saved'),
+  submit: b => { const id = b.dataset.t; run('submitAttempt', [id, draftFields(id)], 'Submitted. Your Team Leader will review it.', () => { clearDraft(id); }); },
+  rmfile: b => run('removeEvidence', [b.dataset.t, b.dataset.fid], 'File removed'),
+  plan: b => run('savePlannedDate', [b.dataset.t, b.value], 'Saved'),
+  upload: b => {
+    const f = b.files[0]; if (!f) return;
+    if (f.size > D.settings.maxUploadMb * 1048576) { toast('That file is larger than ' + D.settings.maxUploadMb + ' MB. Share a link instead.', true); b.value = ''; return; }
+    const r = new FileReader(), id = b.dataset.t;
+    r.onload = () => { const s = String(r.result); run('uploadEvidence', [id, f.name, f.type, s.slice(s.indexOf(',') + 1)], 'File added'); };
+    r.readAsDataURL(f);
+  },
+  ack: b => run('acknowledgePolicy', [b.dataset.p], 'Thank you. Acknowledged.'),
+  selfrate: b => run('saveSelfRating', [+b.dataset.c, D.config.behaviourItems.map((x, i) => val('sr' + i))], 'Saved')
+});
+
+function vToolkit() {
+  return `${pageBanner('Toolkit', 'Short cards you can use in your practice.')}${D.toolkit.length ? `<div class="tiles">${D.toolkit.map(x => `<div class="card"><h3>${esc(x.name)}</h3><p class="hint">${esc(x.group)}${x.level ? ' · ' + esc(x.level) : ''}</p>${x.usedIn ? `<p class="hint">Used in: ${esc(x.usedIn)}</p>` : ''}${x.link ? `<p>${link(x.link, 'Open card')}</p>` : ''}</div>`).join('')}</div>` : `<p class="muted">No toolkit cards yet.</p>`}`;
+}
+
+function vPolicies() {
+  return `${pageBanner('School policies', 'Read each one and tick it off. If a policy changes, you will be asked again.')}
+  ${D.policies.map(p => `<div class="card"><h3>${ico('shield')} ${esc(p.name)}</h3>
+    <p>${p.link ? link(p.link, 'Read the policy') : '<span class="muted">Link not added yet.</span>'}${p.updated ? ' <span class="hint">Last updated ' + fmtDate(p.updated) + '</span>' : ''}</p>
+    <p>${p.acknowledged && !p.stale ? chip('Acknowledged ' + fmtDate(p.acknowledged.slice(0, 10)), 'good') : p.stale ? chip('Updated since you read it', 'warn') : chip('Not yet acknowledged')}</p>
+    ${!D.readOnly && (!p.acknowledged || p.stale) ? `<button class="btn small" data-act="ack" data-p="${esc(p.name)}">I have read and understood this</button>` : ''}</div>`).join('')}`;
+}
+
+function vMyProgress() {
+  const c = D.calc, p = c.progress, cyc = Math.min(Math.max(c.cycle, 1), D.settings.cycles), mine = D.behaviour.find(b => b.cycle === cyc) || { self: [] };
+  return `${pageBanner('My progress', 'Your strands, your professional behaviour and your journey to clearance.')}
+  <div class="card"><h3>${ico('target')} Strands</h3>${p.byStrand.map(s => meter(esc(s.strand), s.passed, s.total, s.avg != null ? ' · average ' + s.avg : '')).join('')}<p class="hint">For clearance each strand needs every task passed and an average of 2.5 or more on the 1 to 4 tasks.</p></div>
+  <div class="card"><h3>${ico('user')} Professional behaviour, cycle ${cyc}</h3>
+    <p class="hint">Rate yourself from 1 to 4. Your Team Leader rates separately and releases their rating when ready.</p>
+    <div class="formgrid">${D.config.behaviourItems.map((n, i) => field(esc(n), `<select id="sr${i}">${opts([[1, '1 Not yet competent'], [2, '2 Developing'], [3, '3 Competent'], [4, '4 Proficient']], mine.self[i], 'Not rated')}</select>`)).join('')}</div>
+    ${D.readOnly ? '' : `<button class="btn small" data-act="selfrate" data-c="${cyc}">Save my self-rating</button>`}
+    <h4 style="margin-top:14px">Released ratings</h4>${D.behaviour.filter(b => b.released).length ? D.behaviour.filter(b => b.released).map(b => `<div class="note">Cycle ${b.cycle}: overall <b>${b.overall}</b> (${esc(SCALE[b.overall] || '')}). ${esc(b.comments || '')}${b.goal ? ' <br><b>Goal:</b> ' + esc(b.goal) : ''}</div>`).join('') : '<p class="muted">None released yet.</p>'}</div>`;
+}
+</script>

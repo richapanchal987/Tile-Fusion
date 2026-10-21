@@ -1,0 +1,176 @@
+<script>
+/* Team Leader screens: Team, Reviews (rating), Trainee profile, Task list editor, Safety flags. Also the Coordinator's trainee list. */
+
+const methodOf = raw => { const s = String(raw.ratingMethod || '').toLowerCase(); return /not pass/.test(s) ? 'none' : /complete/.test(s) ? 'complete' : /%|percent/.test(s) ? 'percent' : 'score'; };
+const reqItems = raw => { const q = /questions?\s*([\d,\s]+?)\s*(?:and\s*(\d+)\s*)?correct/i.exec(raw.passMark || ''); return q ? ((q[1] || '') + ',' + (q[2] || '')).split(',').map(x => parseInt(x, 10)).filter(isFinite) : []; };
+const rawTask = id => (D.catalogue || []).find(x => x.id === id) || { id: id, title: id, ratingMethod: '1–4', passMark: '3' };
+const own = tr => tr.record.section === D.me.section;
+const ownTrainees = () => D.trainees.filter(own);
+const trOf = email => D.trainees.find(t => t.record.email === email);
+const selTrainee = () => trOf(UI.tid) || D.trainees[0];
+function download(name, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' })), a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function pendingReviews() {
+  const out = [];
+  ownTrainees().forEach(tr => tr.attempts.forEach(a => { if (a.status === 'Submitted' || (a.status === 'Rated' && !a.released)) out.push({ tr: tr, a: a }); }));
+  return out.sort((x, y) => (x.a.submitted || '').localeCompare(y.a.submitted || ''));
+}
+
+/* ---------------- Team ---------------- */
+function enrolForm() {
+  return `<details class="card"><summary>Enrol a new trainee</summary><div class="inline-form"><div class="formgrid">
+    ${field('Name', `<input id="en-name" type="text" autocomplete="off">`)}${field('School email', `<input id="en-email" type="email" placeholder="name@fsksurat.in" autocomplete="off">`)}
+    ${field('Start date', `<input id="en-start" type="date">`, 'The first working day of cycle 1.')}
+    ${kind() === 'coord' ? field('Section', `<select id="en-section">${opts(D.config.sections, 'Senior School')}</select>`) : ''}</div>
+    <div class="row"><button class="btn small" data-act="enrol">Enrol trainee</button></div></div></details>`;
+}
+function vTeam() {
+  const list = kind() === 'tl' ? D.trainees : D.trainees.map(t => ({ record: t, calc: null, attempts: [], cover: true }));
+  const rows = list.map(tr => {
+    const r = tr.record, c = tr.calc, waiting = tr.attempts.filter(a => a.status === 'Submitted').length;
+    return `<tr><td><b>${kind() === 'tl' ? `<button class="linkbtn" data-act="pick" data-e="${esc(r.email)}">${esc(r.name)}</button>` : esc(r.name)}</b><br><span class="hint">${esc(r.email)}</span></td>
+      <td>${esc(r.section)}${kind() === 'tl' && tr.cover ? ' ' + chip('Cover', '') : ''}</td>
+      ${c ? `<td class="num">${c.cycle < 1 ? 'Not started' : c.cycle > D.settings.cycles ? 'Finished' : c.cycle + ' / ' + D.settings.cycles}</td><td class="num">${c.progress.passed} / ${c.progress.total} (${c.progress.pct}%)</td>
+      <td class="num">${c.overdue.length ? chip(c.overdue.length + ' overdue', 'bad') : '0'}</td><td class="num">${waiting ? chip(waiting + ' waiting', 'warn') : '0'}</td>` : '<td></td><td></td><td></td><td></td>'}
+      <td>${chip(READY_SHORT[r.caseReadiness], r.caseReadiness === 'Independent' ? 'good' : '')}</td>
+      <td>${c && c.clearance.eligible ? chip('Eligible for clearance', 'good') : r.decision && r.decision !== 'Pending' ? chip(r.decision, 'good') : c && c.supervised.eligible ? chip('Ready for supervised', 'warn') : ''}${r.status !== 'Active' ? ' ' + chip(r.status) : ''}</td></tr>`;
+  }).join('');
+  const pend = kind() === 'tl' ? pendingReviews().length : 0;
+  return `${pageBanner(kind() === 'tl' ? 'Your team' : 'Trainees', kind() === 'tl' ? 'Your own section in full. The other section is there for cover, read-only.' : 'Who is in the programme.')}
+  ${kind() === 'tl' ? tiles([['users', ownTrainees().length, 'trainees in your section', ''], ['inbox', pend, 'waiting for you', pend ? 'warn' : ''], ['alert', ownTrainees().reduce((a, t) => a + t.calc.overdue.length, 0), 'overdue tasks', ''], ['star', ownTrainees().filter(t => t.calc.clearance.eligible).length, 'eligible for clearance', '']]) : ''}
+  <div class="tablewrap"><table class="team"><thead><tr><th>Trainee</th><th>Section</th><th>Cycle</th><th>Tasks passed</th><th>Overdue</th><th>Reviews</th><th>Readiness</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="muted">No trainees yet.</td></tr>'}</tbody></table></div>
+  ${enrolForm()}`;
+}
+
+/* ---------------- Reviews and the rating form ---------------- */
+function attemptEvidence(a) {
+  return `${a.evidence ? `<p>Evidence: ${link(a.evidence)}</p>` : ''}${filesHtml(a.files, a.id, false)}${a.reflection ? `<details open><summary>Reflection</summary>${para(a.reflection)}</details>` : ''}${a.question ? `<div class="note"><b>Question:</b> ${esc(a.question)}</div>` : ''}${a.hours != null ? `<p class="hint">Hours spent: ${esc(a.hours)}</p>` : ''}${a.anon ? '<p class="hint">Trainee confirmed the evidence is anonymised.</p>' : ''}`;
+}
+function ratingForm(tr, a, act) {
+  const raw = rawTask(a.task), m = methodOf(raw), items = reqItems(raw), k = 'rt' + a.id + ':';
+  const crit = (D.rubrics || []).filter(r => raw.rubric && r.rubric && raw.rubric.toLowerCase().indexOf(r.rubric.toLowerCase()) > -1);
+  const dr = (f, fb) => dv(k + f, fb);
+  const score = m === 'score' ? field('Score', `<select ${df(k + 'score')} id="rt-score">${opts([[1, '1 Not yet competent'], [2, '2 Developing'], [3, '3 Competent'], [4, '4 Proficient']], dr('score', a.score), 'Choose')}</select>`, 'Pass mark ' + esc(raw.passMark))
+    : m === 'complete' ? field('Result', `<select ${df(k + 'score')} id="rt-score">${opts(['Complete', 'Not complete'], dr('score', a.score), 'Choose')}</select>`)
+    : field('Percent correct', `<input type="number" min="0" max="100" ${df(k + 'score')} id="rt-score" value="${esc(dr('score', a.score))}">`, 'Pass mark ' + esc(raw.passMark));
+  return `<form class="rate" data-form="rate" onsubmit="return false">
+    <div class="formgrid">${score}${field('Observation type', `<select ${df(k + 'obs')} id="rt-obs">${opts(D.config.obsTypes, dr('obs', a.obsType || raw.obsType), 'Choose')}</select>`)}</div>
+    ${items.length ? `<div class="checks"><span class="hint">Required questions answered correctly:</span>${items.map(q => `<label class="row"><input type="checkbox" id="rt-q${q}" ${df(k + 'q' + q)} ${dr('q' + q, a.rubric && a.rubric['q' + q]) ? 'checked' : ''}> Q${q}</label>`).join('')}</div>` : ''}
+    ${crit.length ? `<div class="formgrid">${crit.map((c, i) => field(esc(c.criterion), `<select id="rt-c${i + 1}" ${df(k + 'c' + (i + 1))}>${opts([[1, '1 ' + (c.levels[0] || '').slice(0, 40)], [2, '2 ' + (c.levels[1] || '').slice(0, 40)], [3, '3 ' + (c.levels[2] || '').slice(0, 40)], [4, '4 ' + (c.levels[3] || '').slice(0, 40)]], dr('c' + (i + 1), a.rubric && a.rubric['c' + (i + 1)]), 'Not scored')}</select>`)).join('')}</div>` : ''}
+    <label class="row"><input type="checkbox" id="rt-flag" ${df(k + 'flag')} ${dr('flag', a.flag) ? 'checked' : ''}> <b>Safety flag</b> <span class="hint">Always requires rework, whatever the score.</span></label>
+    ${field('What is the safety concern?', `<input type="text" id="rt-flagnote" ${df(k + 'flagnote')} value="${esc(dr('flagnote', a.flagNote))}">`, 'Required when the flag is ticked.')}
+    ${field('Feedback for the trainee', `<textarea rows="4" id="rt-fb" ${df(k + 'fb')}>${esc(dr('fb', a.feedback))}</textarea>`)}
+    <div class="formgrid">${field('Development goal', `<input type="text" id="rt-goal" ${df(k + 'goal')} value="${esc(dr('goal', a.goal))}">`)}${field('Rework due (if needed)', `<input type="date" id="rt-due" ${df(k + 'due')} value="${esc(dr('due', a.reworkDue))}">`)}</div>
+    ${field('Private notes (only Team Leaders in your section see these)', `<textarea rows="2" id="rt-notes" ${df(k + 'notes')}>${esc(dr('notes', a.tlNotes))}</textarea>`)}
+    <label class="row"><input type="checkbox" id="rt-release" ${df(k + 'rel')} ${dr('rel', a.released) ? 'checked' : ''}> <span>Release this rating to the trainee now</span></label>
+    <div class="row"><button class="btn" data-act="${act || 'rate'}" data-a="${esc(a.id)}" data-e="${esc(tr.record.email)}" data-t="${esc(a.task)}">${act === 'observe' ? 'Record observed attempt' : a.status === 'Rated' ? 'Update rating' : 'Save rating'}</button></div></form>`;
+}
+function readRating(a) {
+  const raw = rawTask(a.task), rub = {};
+  reqItems(raw).forEach(q => { rub['q' + q] = val('rt-q' + q) === true; });
+  for (let i = 1; i < 12; i++) { const e = document.getElementById('rt-c' + i); if (!e) break; if (e.value) rub['c' + i] = +e.value; }
+  return { score: val('rt-score'), obsType: val('rt-obs'), rubric: rub, flag: val('rt-flag'), flagNote: val('rt-flagnote'), feedback: val('rt-fb'), goal: val('rt-goal'), reworkDue: val('rt-due'), tlNotes: val('rt-notes'), release: val('rt-release') };
+}
+function vReviews() {
+  const q = pendingReviews(), sel = q.find(x => x.a.id === UI.att) || q[0];
+  const left = q.length ? `<ul class="tasklist">${q.map(x => `<li><button class="linkbtn" data-act="pickatt" data-a="${esc(x.a.id)}" ${sel && sel.a.id === x.a.id ? 'aria-current="true"' : ''}>${esc(x.tr.record.name)}: ${esc(x.a.task)} ${esc(taskTitle(x.a.task))}</button> ${x.a.status === 'Submitted' ? chip('To rate', 'warn') : chip('Rated, not released')}<br><span class="hint">Attempt ${x.a.no}, ${fmtDate((x.a.submitted || '').slice(0, 10))}</span></li>`).join('')}</ul>` : '';
+  return `${pageBanner('Reviews', 'Work waiting for you to rate, and ratings you have not released yet.')}
+  ${!q.length ? `<div class="center">${emptyArt('reviews')}<h2>All caught up</h2><p class="muted">Nothing is waiting.</p></div>` : `<div class="cols"><div>
+    <div class="card"><h3>${esc(sel.tr.record.name)} · ${esc(sel.a.task)} ${esc(taskTitle(sel.a.task))}</h3><p class="hint">Attempt ${sel.a.no}${sel.a.version ? ', Version ' + esc(sel.a.version) : ''}${sel.a.source === 'Observed' ? ', observed' : ''}</p>${attemptEvidence(sel.a)}</div>
+    <div class="card"><h3>${ico('reviews')} Your rating</h3>${ratingForm(sel.tr, sel.a)}</div></div><aside><div class="card"><h3>Queue (${q.length})</h3>${left}</div></aside></div>`}`;
+}
+Object.assign(ACTIONS, {
+  pick: b => { UI.tid = b.dataset.e; UI.view = 'trainee'; render(); window.scrollTo(0, 0); },
+  pickatt: b => { UI.att = b.dataset.a; render(); },
+  picktr: b => { UI.tid = b.value; render(); },
+  rate: b => { const a = D.trainees.map(t => t.attempts.find(x => x.id === b.dataset.a)).find(Boolean); run('rateAttempt', [b.dataset.a, readRating(a)], 'Rating saved', () => { Object.keys(UI.draft).forEach(k => { if (k.indexOf('rt' + b.dataset.a) === 0) delete UI.draft[k]; }); }); },
+  enrol: () => run('enrolTrainee', [{ name: val('en-name'), email: val('en-email'), start: val('en-start'), section: val('en-section') }], 'Trainee enrolled'),
+  entry: b => run('setEntryCheck', [b.dataset.e, b.dataset.area, val('ec-r-' + b.dataset.i), val('ec-p-' + b.dataset.i), val('ec-n-' + b.dataset.i)], 'Entry check saved'),
+  due: b => run('setDueOverride', [b.dataset.e, b.dataset.t, val('do-' + b.dataset.t)], 'Due date saved'),
+  supervised: b => run('confirmSupervised', [b.dataset.e], 'Supervised Practice confirmed'),
+  clearance: b => run('recordClearance', [b.dataset.e, val('cl-d'), val('cl-c')], 'Decision recorded'),
+  behave: b => run('saveBehaviour', [b.dataset.e, +val('bh-cycle'), { items: D.config.behaviourItems.map((x, i) => val('bh' + i)), comments: val('bh-c'), goal: val('bh-g'), tlNotes: val('bh-n'), release: val('bh-rel') }], 'Behaviour rating saved'),
+  bcycle: b => { UI.tab.bcycle = +b.value; render(); },
+  updtr: b => run('updateTrainee', [b.dataset.e, { name: val('ut-name'), start: val('ut-start'), status: val('ut-status'), cases: val('ut-cases'), groups: val('ut-groups'), background: val('ut-bg'), entryNotes: val('ut-en'), extensionNotes: val('ut-ex') }], 'Saved'),
+  exportrec: async b => { try { busy = true; const r = await call('exportTraineeRecord', b.dataset.e); download(r.name, r.text); } catch (e) { toast(e.message, true); } finally { busy = false; } },
+  obsopen: b => { UI.obs = b.dataset.t; render(); },
+  obsclose: () => { UI.obs = null; render(); },
+  observe: b => run('recordObserved', [b.dataset.e, b.dataset.t, readRating({ task: b.dataset.t })], 'Observed attempt recorded', () => { UI.obs = null; })
+});
+
+/* ---------------- Trainee profile ---------------- */
+function vTraineeProfile() {
+  const tr = selTrainee(); if (!tr) return pageBanner('Trainee') + '<p class="muted">No trainees yet.</p>';
+  const r = tr.record, c = tr.calc, cover = tr.cover || ['Completed', 'Left'].indexOf(r.status) > -1, e = esc(r.email);
+  const sel = `<div class="panel"><div class="formgrid">${field('Trainee', `<select data-change="picktr" aria-label="Choose trainee">${D.trainees.map(t => `<option value="${esc(t.record.email)}" ${t.record.email === r.email ? 'selected' : ''}>${esc(t.record.name)}${t.cover ? ' (cover)' : ''}</option>`).join('')}</select>`)}</div></div>`;
+  const taskRows = D.catalogue.filter(t => t.active === 'Yes' && c.tasks[t.id]).map(t => { const s = c.tasks[t.id];
+    return `<tr><td>${esc(t.id)}</td><td>${esc(t.title)}</td><td>${chip(STATUS[s.status], STATUS_CHIP[s.status])}${s.pathway === 'Show quickly' ? ' ' + chip('Show quickly', 'good') : ''}${s.flagEver ? ' ' + chip('Flag', 'bad') : ''}</td><td class="num">${esc(fmtShort(s.due))}${s.overdue ? ' ' + chip('Overdue', 'bad') : ''}</td><td class="num">${s.used}/${s.maxAttempts}</td><td class="num">${s.best == null ? '' : esc(s.best)}</td>
+      <td>${cover ? '' : (['notstarted', 'progress', 'rework'].indexOf(s.status) > -1 ? `<button class="btn ghost small" data-act="obsopen" data-t="${esc(t.id)}">Observed</button> ` : '') + `<input type="date" id="do-${esc(t.id)}" value="${esc((tr.taskDates[t.id] || {}).dueOverride || '')}" style="width:150px" aria-label="Due date override for ${esc(t.id)}"> <button class="btn ghost small" data-act="due" data-e="${e}" data-t="${esc(t.id)}">Set</button>`}</td></tr>`; }).join('');
+  const entry = D.config.areas.map((a, i) => { const x = tr.entry[a] || {};
+    return `<div class="formgrid">${field(esc(a), `<select id="ec-r-${i}" ${cover ? 'disabled' : ''}>${opts([[1, '1'], [2, '2'], [3, '3'], [4, '4']], x.rating, 'Not rated')}</select>`)}${field('Pathway', `<select id="ec-p-${i}" ${cover ? 'disabled' : ''}>${opts(['Focus', 'Show quickly'], x.pathway, 'Not set')}</select>`)}${field('Notes', `<input type="text" id="ec-n-${i}" value="${esc(x.notes || '')}" ${cover ? 'disabled' : ''}>`)}${cover ? '' : `<div><button class="btn small" data-act="entry" data-e="${e}" data-i="${i}" data-area="${esc(a)}">Save</button></div>`}</div>`; }).join('');
+  const cl = c.clearance, chk = (ok, text) => `<li>${ok ? ico('check', 14) : ico('alert', 14)} ${esc(text)}</li>`;
+  const cyc = UI.tab.bcycle || Math.min(Math.max(c.cycle, 1), D.settings.cycles), bh = tr.behaviour.find(b => b.cycle === cyc) || { items: [], self: [], reliability: '' };
+  return `${pageBanner(r.name, r.section + ' · ' + READY_SHORT[r.caseReadiness] + ' · started ' + fmtDate(r.start))}${sel}
+  ${tr.cover && kind() === 'tl' ? `<div class="cover-note">${esc(r.section)} trainee: you can read this record for cover but not change it. Background and private notes are hidden.</div>` : ''}
+  ${tiles([['check', c.progress.passed + '/' + c.progress.total, 'tasks passed', ''], ['calendar', c.cycle < 1 ? 0 : Math.min(c.cycle, D.settings.cycles), 'cycle', ''], ['alert', c.overdue.length, 'overdue', ''], ['flag', cl.openFlags.length, 'open safety flags', cl.openFlags.length ? 'warn' : '']])}
+  <div class="card"><h3>${ico('target')} Strands</h3>${c.progress.byStrand.map(s => meter(esc(s.strand), s.passed, s.total, s.avg != null ? ' · average ' + s.avg : '')).join('')}</div>
+  <div class="card"><h3>${ico('shield')} Readiness and clearance</h3><ul class="tasklist">
+    ${chk(c.supervised.prereqDone, 'Supervised Practice prerequisites passed')}${chk(c.supervised.reached, 'Cycle ' + D.settings.supervisedEarliestCycle + ' reached (' + fmtShort(c.supervised.earliest) + ')')}
+    ${chk(cl.allPassed, 'Every task passed')}${chk(cl.strandsOk, 'Each strand average ' + D.settings.strandAverageMin + ' or more')}${chk(cl.keySkillsOk, 'Key Skills: ' + cl.keySkills.filter(k => k.ok).length + ' of ' + cl.keySkills.length + ' met')}${chk(cl.behaviourOk, 'Professional behaviour 3 or more in the last ' + D.settings.behaviourCycles + ' released cycles')}${chk(!cl.openFlags.length, 'No open safety flags')}</ul>
+    ${cover ? `<p>${chip(READY_SHORT[r.caseReadiness])} Clearance decision: ${esc(r.decision)}</p>` : `<div class="row">${r.caseReadiness === 'Not Cleared' ? `<button class="btn small" data-act="supervised" data-e="${e}" ${c.supervised.eligible ? '' : 'disabled'}>Confirm Supervised Practice</button>` : ''}</div>
+    <div class="formgrid">${field('Clearance decision', `<select id="cl-d">${opts(D.config.decisions, r.decision)}</select>`)}${field('Conditions (if any)', `<input type="text" id="cl-c" value="${esc(r.conditions)}">`)}<div><button class="btn small" data-act="clearance" data-e="${e}">Record decision</button></div></div>
+    <p class="hint">${cl.eligible ? 'All checks are met. The Principal signs off a cleared trainee.' : 'A trainee cannot be cleared until every check is met.'}${r.signoffDate ? ' Principal signed off on ' + fmtDate(r.signoffDate) + '.' : ''}</p>`}</div>
+  <h2 class="sechead">Tasks</h2><div class="tablewrap"><table class="matrix"><thead><tr><th>ID</th><th>Task</th><th>Status</th><th>Due</th><th>Attempts</th><th>Best</th><th>Actions</th></tr></thead><tbody>${taskRows}</tbody></table></div>
+  ${!cover && UI.obs && c.tasks[UI.obs] ? `<div class="card"><h3>${ico('eye')} Observed attempt: ${esc(UI.obs)} ${esc(taskTitle(UI.obs))}</h3><p class="hint">Rate a role play, viva or real session without the trainee submitting anything first.</p>${ratingForm(tr, { id: 'obs-' + UI.obs, task: UI.obs, status: 'Submitted', score: '', rubric: {}, flag: false, flagNote: '', feedback: '', goal: '', reworkDue: '', tlNotes: '', released: false, obsType: 'Role play' }, 'observe')}<button class="btn ghost small" data-act="obsclose">Cancel</button></div>` : ''}
+  <div class="card"><h3>${ico('target')} Entry check</h3><p class="hint">Rate each area 1 to 4 and choose a pathway. "Show quickly" lets the trainee go straight to rated fast-track tasks. Critical gates are never skipped.</p>${entry}</div>
+  <div class="card"><h3>${ico('user')} Professional behaviour</h3>
+    <div class="formgrid">${field('Cycle', `<select id="bh-cycle" data-change="bcycle">${opts(Array.from({ length: D.settings.cycles }, (_, i) => i + 1), cyc)}</select>`)}</div>
+    ${bh.self && bh.self.some(x => x) ? `<p class="hint">Trainee self-rating: ${bh.self.map((x, i) => esc(D.config.behaviourItems[i].split(' ')[0]) + ' ' + (x || '-')).join(', ')}</p>` : ''}${bh.reliability ? `<div class="note"><b>Coordinator input on reliability:</b> ${esc(bh.reliability)}</div>` : ''}
+    <div class="formgrid">${D.config.behaviourItems.map((n, i) => field(esc(n), `<select id="bh${i}" ${cover ? 'disabled' : ''}>${opts([[1, '1'], [2, '2'], [3, '3'], [4, '4']], bh.items[i], 'Not rated')}</select>`)).join('')}</div>
+    ${cover ? '' : `${field('Comments for the trainee', `<textarea id="bh-c" rows="2">${esc(bh.comments || '')}</textarea>`)}${field('Development goal', `<input id="bh-g" type="text" value="${esc(bh.goal || '')}">`)}${field('Private notes', `<textarea id="bh-n" rows="2">${esc(bh.tlNotes || '')}</textarea>`)}
+    <label class="row"><input type="checkbox" id="bh-rel" ${bh.released ? 'checked' : ''}> Release to the trainee</label><button class="btn small" data-act="behave" data-e="${e}">Save behaviour rating</button>`}</div>
+  ${cover ? '' : `<details class="card"><summary>Details and notes</summary><div class="inline-form"><div class="formgrid">${field('Name', `<input id="ut-name" type="text" value="${esc(r.name)}">`)}${field('Start date', `<input id="ut-start" type="date" value="${esc(r.start)}">`)}${field('Status', `<select id="ut-status">${opts(['Active', 'Extended', 'Completed', 'Left'], r.status)}</select>`)}${field('Supervised cases', `<input id="ut-cases" type="number" min="0" value="${esc(r.cases)}">`)}${field('Groups', `<input id="ut-groups" type="number" min="0" value="${esc(r.groups)}">`)}</div>
+    ${field('Background', `<textarea id="ut-bg" rows="2">${esc(r.background)}</textarea>`)}${field('Entry check notes', `<textarea id="ut-en" rows="2">${esc(r.entryNotes)}</textarea>`)}${field('Extension notes', `<textarea id="ut-ex" rows="2">${esc(r.extensionNotes)}</textarea>`)}
+    <p class="hint">Do not write anything that identifies a student. Setting the status to Completed or Left closes the record.</p><div class="row"><button class="btn small" data-act="updtr" data-e="${e}">Save</button><button class="btn ghost small" data-act="exportrec" data-e="${e}">Download this trainee’s record (CSV)</button></div></div></details>`}
+  <h2 class="sechead">Attempts</h2>${tr.attempts.filter(a => a.status !== 'Draft').sort((x, y) => (y.submitted || '').localeCompare(x.submitted || '')).map(a => `<div class="card"><h4>${esc(a.task)} ${esc(taskTitle(a.task))} · attempt ${a.no}${a.version ? ' (Version ' + esc(a.version) + ')' : ''}</h4><p>${a.status === 'Rated' ? chip('Score ' + a.score, a.reworkRequired ? 'bad' : 'good') + (a.flag ? ' ' + chip('Safety flag', 'bad') : '') + (a.released ? ' ' + chip('Released', 'good') : ' ' + chip('Not released', 'warn')) : chip('Awaiting rating', 'warn')}</p>${attemptEvidence(a)}${a.feedback ? `<div class="note">${esc(a.feedback)}</div>` : ''}${a.tlNotes ? `<div class="note"><b>Private:</b> ${esc(a.tlNotes)}</div>` : ''}${a.processConfirmed ? `<p class="hint">Process confirmed: ${esc(a.processConfirmed)}</p>` : ''}${!tr.cover && a.status === 'Rated' ? `<button class="btn ghost small" data-act="togglerel" data-a="${esc(a.id)}" data-r="${a.released ? 0 : 1}">${a.released ? 'Withdraw release' : 'Release to trainee'}</button>` : ''}</div>`).join('') || '<p class="muted">No attempts yet.</p>'}`;
+}
+ACTIONS.togglerel = b => run('releaseRating', [b.dataset.a, b.dataset.r === '1'], 'Updated');
+
+/* ---------------- Safety flags ---------------- */
+function vFlags() {
+  const rows = [];
+  ownTrainees().forEach(tr => tr.attempts.forEach(a => { if (a.flag) rows.push({ tr: tr, a: a, open: tr.calc.clearance.openFlags.indexOf(a.task) > -1 }); }));
+  return `${pageBanner('Safety flags', 'Every flag you have raised in your section. A flagged task needs rework before it can pass.')}
+  <div class="tablewrap"><table><thead><tr><th>Trainee</th><th>Task</th><th>Date</th><th>Concern</th><th>Released</th><th>Status</th></tr></thead><tbody>${rows.map(x => `<tr class="${x.open ? 'flagrow' : ''}"><td>${esc(x.tr.record.name)}</td><td>${esc(x.a.task)} ${esc(taskTitle(x.a.task))}</td><td>${esc(fmtDate(x.a.assessed))}</td><td>${esc(x.a.flagNote)}</td><td>${x.a.released ? 'Yes' : 'No'}</td><td>${x.open ? chip('Open', 'bad') : chip('Resolved', 'good')}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No safety flags.</td></tr>'}</tbody></table></div>`;
+}
+
+/* ---------------- The task list (edited here; the app is the master copy) ---------------- */
+function vCatalogue() {
+  const q = UI.q.toLowerCase(), list = D.catalogue.filter(t => !q || (t.id + ' ' + t.title).toLowerCase().indexOf(q) > -1);
+  if (UI.edit !== null) return taskEditor();
+  return `${pageBanner('Task list', 'The master copy of every task. Edit here; changes are logged. Retire a task instead of deleting it.')}
+  <div class="panel"><div class="formgrid">${field('Search', `<input id="q" type="search" value="${esc(UI.q)}" data-change="search" placeholder="Task ID or title">`)}<div class="row"><button class="btn small" data-act="newtask">Add a task</button><button class="btn ghost small" data-act="exportcat">Download as CSV</button></div></div></div>
+  <div class="tablewrap"><table><thead><tr><th>ID</th><th>Task</th><th>Milestone</th><th>Strand</th><th>Rating</th><th>Content</th><th>Active</th><th></th></tr></thead><tbody>${list.map(t => `<tr><td>${esc(t.id)}</td><td>${esc(t.title)}</td><td>${esc(t.milestone)}</td><td>${esc(t.strand)}</td><td>${esc(t.ratingMethod)} ${esc(t.passMark)}</td><td>${esc(t.contentStatus)}</td><td>${t.active === 'Yes' ? 'Yes' : chip('Retired')}</td><td><button class="btn small" data-act="edittask" data-t="${esc(t.id)}">Edit</button> <button class="btn ghost small" data-act="retire" data-t="${esc(t.id)}" data-r="${t.active === 'Yes' ? 0 : 1}">${t.active === 'Yes' ? 'Retire' : 'Restore'}</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+function taskEditor() {
+  const t = UI.edit === '' ? {} : D.catalogue.find(x => x.id === UI.edit) || {}, groups = [];
+  D.config.taskFields.forEach(f => { if (f.kind !== 'calc' && groups.indexOf(f.group) < 0) groups.push(f.group); });
+  const inp = f => { const v = esc(t[f.key] == null ? (f.key === 'active' ? 'Yes' : '') : t[f.key]), id = 'tf-' + f.key;
+    if (f.kind === 'long') return `<textarea id="${id}" rows="4">${v}</textarea>`;
+    if (f.kind === 'yesno') return `<select id="${id}">${opts(['Yes', 'No'], t[f.key] || (f.key === 'active' ? 'Yes' : 'No'))}</select>`;
+    return `<input id="${id}" type="text" value="${v}" ${f.key === 'id' && UI.edit !== '' ? 'disabled' : ''}>`; };
+  return `<button class="btn ghost small" data-act="canceledit">${ico('refresh', 14)} Back to the list</button>${pageBanner(UI.edit === '' ? 'Add a task' : 'Edit ' + UI.edit, 'Prerequisites are Task IDs separated by commas. The app checks for loops and unknown IDs.')}
+  ${groups.map(g => `<details class="card" ${g === 'Identity' ? 'open' : ''}><summary>${esc(g)}</summary><div class="inline-form"><div class="formgrid">${D.config.taskFields.filter(f => f.group === g && f.kind !== 'calc').map(f => field(esc(f.header), inp(f))).join('')}</div></div></details>`).join('')}
+  <div class="row"><button class="btn" data-act="savetask">Save task</button></div>`;
+}
+Object.assign(ACTIONS, {
+  newtask: () => { UI.edit = ''; render(); window.scrollTo(0, 0); },
+  edittask: b => { UI.edit = b.dataset.t; render(); window.scrollTo(0, 0); },
+  canceledit: () => { UI.edit = null; render(); },
+  savetask: () => { const f = {}; D.config.taskFields.forEach(x => { if (x.kind !== 'calc') { const e = document.getElementById('tf-' + x.key); if (e && !e.disabled) f[x.key] = e.value; } }); const id = UI.edit === '' ? f.id : UI.edit; f.id = id; run('saveTask', [{ id: id, fields: f }], 'Task saved', () => { UI.edit = null; }); },
+  retire: b => run('setTaskActive', [b.dataset.t, b.dataset.r === '1'], b.dataset.r === '1' ? 'Task restored' : 'Task retired'),
+  exportcat: async () => { try { busy = true; const r = await call('exportCatalogue'); download(r.name, r.text); } catch (e) { toast(e.message, true); } finally { busy = false; } }
+});
+</script>

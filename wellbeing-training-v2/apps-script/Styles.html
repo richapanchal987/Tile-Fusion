@@ -359,4 +359,24 @@ body.intro .task:nth-child(4),body.intro .tile:nth-child(4){animation-delay:.15s
   .scale{grid-template-columns:repeat(2,1fr)}
   .guide dl{grid-template-columns:1fr}
 }
+
+/* ---- v2 additions ---- */
+.changes{margin-bottom:20px}
+.sechead{margin-top:22px}
+.card{margin-bottom:14px}
+.task.rowbtn{display:grid;grid-template-columns:76px 1fr auto;gap:4px 12px;align-items:center;width:100%;text-align:left;padding:13px 16px;cursor:pointer;color:var(--ink);font:inherit;border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.task.rowbtn .ttopic{grid-column:2/4}
+.task.rowbtn .tname{font-weight:600}
+textarea,input[type=text],input[type=url],input[type=date],input[type=number],input[type=search],input[type=email],select{width:100%;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+textarea{resize:vertical}
+.field>span:first-child{font-size:13px;font-weight:600;color:var(--muted)}
+.cols>div,.cols>aside{min-width:0}
+.tag-row{display:flex;gap:6px;flex-wrap:wrap}
+.matrix td,.matrix th{white-space:nowrap}
+.flagrow td{background:var(--red-soft)}
+.rate{display:grid;gap:12px}
+.cover-note{border-left:3px solid var(--yellow);padding:7px 12px;background:var(--gold-soft);color:var(--ink);border-radius:0 10px 10px 0;font-size:14px}
+.warnlist li{color:var(--gold)}
+.inline-form{display:grid;gap:10px;margin-top:10px}
+@media (max-width:900px){.task.rowbtn{grid-template-columns:60px 1fr}.task.rowbtn .chip{grid-column:2}}
 </style>

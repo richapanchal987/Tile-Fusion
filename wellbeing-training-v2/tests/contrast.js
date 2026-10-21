@@ -1,7 +1,7 @@
 // Measures text contrast (WCAG) for every visible piece of text, in light and dark mode, on the main screens.
 // Run: NODE_PATH=$(npm root -g) node tests/contrast.js      Exit code 1 if anything is below 4.5:1 (3:1 for large text).
 const { chromium } = require('playwright');
-const { open, ADMIN } = require('./sample-world');
+const { open, COORD, TLS, PRS, ASHA } = require('./sample-world');
 
 function auditInPage() {
   const cv = document.createElement('canvas'); cv.width = cv.height = 1; const cx = cv.getContext('2d', { willReadFrequently: true });
@@ -43,12 +43,22 @@ function auditInPage() {
 (async () => {
   const browser = await chromium.launch(); let bad = 0;
   const views = [
-    ['trainee home + open task', 'asha@fsksurat.in', async p => { await p.locator('.task').first().locator('summary').click(); await p.locator('details[data-key=gates] summary').click(); }],
-    ['guide', 'asha@fsksurat.in', async p => { await p.locator('.tab', { hasText: 'Guide' }).click(); }],
-    ['review queue', 'tl@fsksurat.in', async () => {}],
-    ['team', ADMIN, async p => { await p.locator('.tab', { hasText: 'Team' }).click(); }],
-    ['curriculum', ADMIN, async p => { await p.locator('.tab', { hasText: 'Curriculum' }).click(); await p.locator('[data-act=task-edit]').first().click(); }],
-    ['assessor view of a trainee', 'tl@fsksurat.in', async p => { await p.locator('.tab', { hasText: 'Trainee' }).click(); await p.locator('.task').first().locator('summary').click(); }],
+    ['trainee home', ASHA, async () => {}],
+    ['trainee tasks', ASHA, async p => { await p.locator('.tab', { hasText: 'Tasks' }).click(); }],
+    ['trainee task (submit form)', ASHA, async p => { await p.locator('.tab', { hasText: 'Tasks' }).click(); await p.locator('.task', { hasText: 'ADU-01' }).click(); }],
+    ['trainee locked task', ASHA, async p => { await p.locator('.tab', { hasText: 'Tasks' }).click(); await p.locator('.task', { hasText: 'STU-22' }).click(); }],
+    ['trainee policies', ASHA, async p => { await p.locator('.tab', { hasText: 'Policies' }).click(); }],
+    ['trainee my progress', ASHA, async p => { await p.locator('.tab', { hasText: 'My progress' }).click(); }],
+    ['TL team', TLS, async () => {}],
+    ['TL reviews', TLS, async p => { await p.locator('.tab', { hasText: 'Reviews' }).click(); }],
+    ['TL trainee profile', TLS, async p => { await p.locator('.tab', { hasText: 'Trainee' }).click(); }],
+    ['TL task list', TLS, async p => { await p.locator('.tab', { hasText: 'Task list' }).click(); }],
+    ['TL task editor', TLS, async p => { await p.locator('.tab', { hasText: 'Task list' }).click(); await p.locator('[data-act=edittask]').first().click(); }],
+    ['TL safety flags', TLS, async p => { await p.locator('.tab', { hasText: 'Safety flags' }).click(); }],
+    ['Coordinator confirmations', COORD, async () => {}],
+    ['Coordinator admin', COORD, async p => { await p.locator('.tab', { hasText: 'Admin' }).click(); }],
+    ['Coordinator history', COORD, async p => { await p.locator('.tab', { hasText: 'History' }).click(); await p.waitForSelector('td.num'); }],
+    ['Principal clearance', PRS, async () => {}],
     ['not enrolled', 'nobody@fsksurat.in', async () => {}],
   ];
   for (const scheme of ['light', 'dark']) for (const [name, email, prep] of views) {

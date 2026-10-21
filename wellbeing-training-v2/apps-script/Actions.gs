@@ -92,11 +92,11 @@ function getEvidenceFile(attemptId, fileId) {
   return { name: f.name, mime: blob.getContentType(), data: Utilities.base64Encode(blob.getBytes()) };
 }
 
-function markSeen(attemptId) {
+/** Opening a task marks its released feedback as read. */
+function markSeen(taskId) {
   return withLock_(() => {
-    const c = ctx_(); const a = attemptOf_(c.db, attemptId);
-    if (c.me.kind !== 'trainee' || a.trainee !== c.me.email) throw new Error('This is not your attempt.');
-    if (a.status === 'Rated' && a.released && !a.seen) { a.seen = true; saveAttempt_(a); }
+    const c = ctx_(); if (c.me.kind !== 'trainee') throw new Error('Only trainees can do this.');
+    c.db.attempts.filter(a => a.trainee === c.me.email && a.task === String(taskId) && a.status === 'Rated' && a.released && !a.seen).forEach(a => { a.seen = true; saveAttempt_(a); });
     return getBootstrap();
   });
 }

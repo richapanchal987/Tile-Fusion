@@ -1,0 +1,71 @@
+<script>
+/* Coordinator screens (confirmations, administration, history) and the Principal's clearance page. */
+
+/* ---------------- Confirmations (R16) ---------------- */
+function vConfirm() {
+  const todo = D.confirmations.filter(c => c.rated && !c.processConfirmed), done = D.confirmations.filter(c => c.processConfirmed);
+  const card = (c, open) => `<div class="card"><h3>${esc(c.traineeName)}: ${esc(c.task)} ${esc(c.title)}</h3><p class="hint">Attempt ${c.no}, submitted ${fmtDate((c.submitted || '').slice(0, 10))}</p>
+    ${c.evidenceDesc ? `<p class="hint">Expected evidence: ${esc(c.evidenceDesc)}</p>` : ''}${c.evidence ? `<p>${link(c.evidence)}</p>` : ''}${filesHtml(c.files, c.id, false)}${c.reflection ? `<details><summary>Reflection</summary>${para(c.reflection)}</details>` : ''}
+    ${open ? `${field('Note (optional)', `<input type="text" id="pn-${esc(c.id)}">`)}<div class="row"><button class="btn small" data-act="confirmproc" data-a="${esc(c.id)}" data-ok="1">Process was followed</button><button class="btn danger small" data-act="confirmproc" data-a="${esc(c.id)}" data-ok="0">Process was not followed</button></div>`
+      : `<p>${c.processConfirmed === 'Yes' ? chip('Process confirmed', 'good') : chip('Not confirmed', 'bad')} <span class="hint">${esc(c.processDate)} ${esc(c.processNote)}</span></p>`}</div>`;
+  const cyc = Math.min(Math.max(UI.tab.rcycle || 1, 1), D.settings.cycles);
+  return `${pageBanner('Confirmations', 'Jointly assessed tasks: confirm the process was followed. You see the evidence, not scores or feedback.')}
+  ${todo.length ? todo.map(c => card(c, true)).join('') : `<div class="center">${emptyArt('reviews')}<h2>Nothing to confirm</h2><p class="muted">Rated joint tasks will appear here.</p></div>`}
+  <div class="card"><h3>${ico('user')} Reliability input</h3><p class="hint">Attendance, punctuality and follow-through for a trainee in a cycle. The Team Leader reads this when rating professional behaviour.</p>
+    <div class="formgrid">${field('Trainee', `<select id="rl-t">${opts(D.trainees.map(t => [t.email, t.name]), '')}</select>`)}${field('Cycle', `<input id="rl-c" type="number" min="1" max="${D.settings.cycles}" value="${cyc}">`)}</div>${field('Input', `<textarea id="rl-x" rows="2"></textarea>`)}<button class="btn small" data-act="reliab">Save input</button></div>
+  ${done.length ? `<h2 class="sechead">Already confirmed</h2>${done.slice(0, 20).map(c => card(c, false)).join('')}` : ''}`;
+}
+
+/* ---------------- Administration ---------------- */
+function vAdmin() {
+  const info = UI.importInfo, S = D.settings;
+  const imp = `<div class="card"><h3>${ico('inbox')} Task list import</h3>
+    <p>${D.imported ? `The task list was imported (${D.catalogueCount} active tasks). The app is now the master copy; edit tasks on the Task list page.` : 'Bring the task list in from the counsellors’ workbook, once. After this the app is the only master copy.'}</p>
+    <div class="formgrid">${field('Workbook link or ID', `<input id="wb-id" type="text" ${df('wb')} value="${esc(dv('wb', ''))}" placeholder="https://docs.google.com/spreadsheets/d/…">`, 'Share the workbook with the account that runs this app first.')}
+    ${D.imported ? `<label class="row"><input type="checkbox" id="wb-replace"> <span>Replace the existing task list</span></label>` : ''}</div>
+    <div class="row"><button class="btn small" data-act="checkimport">Check the workbook</button><button class="btn small" data-act="doimport" ${info && !info.error ? '' : 'disabled'}>Import</button></div>
+    ${info && info.counts ? `<div class="note">Found ${info.counts.tasks} tasks (${info.counts.active} active), ${info.counts.keySkills} Key Skills, ${info.counts.toolkit} toolkit cards, ${info.counts.rubrics} rubric rows.${info.warnings.length ? '<br><b>' + info.warnings.length + ' thing' + (info.warnings.length === 1 ? '' : 's') + ' to look at:</b><ul class="warnlist">' + info.warnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '<br>No problems found.'}</div>` : ''}</div>`;
+  const users = `<div class="card"><h3>${ico('users')} Staff</h3><div class="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Active</th></tr></thead><tbody>${D.users.map(u => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.role)}</td><td>${u.active ? 'Yes' : 'No'}</td></tr>`).join('')}</tbody></table></div>
+    <div class="formgrid">${field('Name', `<input id="us-n" type="text">`)}${field('School email', `<input id="us-e" type="email">`)}${field('Role', `<select id="us-r">${opts(D.config.roles, '')}</select>`)}${field('Active', `<select id="us-a">${opts(['Yes', 'No'], 'Yes')}</select>`)}</div>
+    <button class="btn small" data-act="saveuser">Add or update</button><p class="hint">Saving an existing email changes their role or switches them off.</p></div>`;
+  const ms = `<div class="card"><h3>${ico('flag')} Milestones</h3><div class="formgrid">${D.milestones.map(m => `<div class="inline-form">${field('Milestone ' + m.n + ' ends in cycle', `<input id="ms-d${m.n}" type="number" min="1" max="${S.cycles}" value="${m.deadline}">`, m.tasks + ' tasks, about ' + m.hoursPerDay + ' hours a day')}${field('Main focus', `<input id="ms-f${m.n}" type="text" value="${esc(m.focus)}">`)}</div>`).join('')}</div><button class="btn small" data-act="savems">Save milestones</button></div>`;
+  const pol = `<div class="card"><h3>${ico('shield')} Policies</h3>${D.policies.map((p, i) => `<div class="formgrid">${field('Policy', `<input id="po-n${i}" type="text" value="${esc(p.name)}" disabled>`)}${field('Link', `<input id="po-l${i}" type="url" value="${esc(p.link)}">`)}${field('Last updated', `<input id="po-u${i}" type="date" value="${esc(p.updated)}">`, 'Changing this asks trainees to acknowledge again.')}<div><button class="btn small" data-act="savepol" data-i="${i}">Save</button></div></div>`).join('')}
+    <div class="formgrid">${field('New policy name', `<input id="po-new" type="text">`)}<div><button class="btn ghost small" data-act="addpol">Add a policy</button></div></div></div>`;
+  const hol = `<div class="card"><h3>${ico('calendar')} School holidays</h3><p class="hint">One date per line (yyyy-mm-dd). Cycles skip these days and Sundays.</p><textarea id="ho-t" rows="5">${esc(D.holidays.join('\n'))}</textarea><button class="btn small" data-act="saveholidays">Save holidays</button></div>`;
+  const keys = ['cycles', 'daysPerCycle', 'passScore', 'supervisedEarliestCycle', 'strandAverageMin', 'keySkillOccasions', 'behaviourCycles', 'dueSoonDays', 'maxUploadMb', 'maxCases', 'maxGroups', 'maxCasesM4'];
+  const set = `<details class="card"><summary>Settings</summary><div class="inline-form"><div class="formgrid">${keys.map(k => field(k, `<input id="st-${k}" type="number" step="any" value="${esc(S[k])}">`)).join('')}</div><button class="btn small" data-act="savesettings">Save settings</button></div></details>`;
+  return `${pageBanner('Administration', 'People, deadlines, policies and holidays.')}${imp}${users}${ms}${pol}${hol}${set}`;
+}
+Object.assign(ACTIONS, {
+  confirmproc: b => run('confirmProcess', [b.dataset.a, b.dataset.ok === '1', val('pn-' + b.dataset.a)], 'Recorded'),
+  reliab: () => run('saveReliability', [val('rl-t'), +val('rl-c'), val('rl-x')], 'Saved'),
+  checkimport: async () => { try { busy = true; UI.importInfo = await call('importWorkbook', val('wb-id'), true, val('wb-replace') === true); } catch (e) { UI.importInfo = { error: true, counts: null, warnings: [] }; toast(e.message || String(e), true); } finally { busy = false; render(); } },
+  doimport: async () => { try { busy = true; const r = await call('importWorkbook', val('wb-id'), false, val('wb-replace') === true); UI.importInfo = null; setData(r.bootstrap); toast('Imported ' + r.counts.tasks + ' tasks'); } catch (e) { toast(e.message || String(e), true); } finally { busy = false; render(); } },
+  saveuser: () => run('saveUser', [val('us-e'), val('us-n'), val('us-r'), val('us-a') === 'Yes'], 'Saved'),
+  savems: () => run('saveMilestones', [[1, 2, 3, 4].map(n => ({ n: n, deadline: val('ms-d' + n), focus: val('ms-f' + n) }))], 'Milestones saved'),
+  savepol: b => run('savePolicy', [val('po-n' + b.dataset.i), val('po-l' + b.dataset.i), val('po-u' + b.dataset.i)], 'Saved'),
+  addpol: () => run('savePolicy', [val('po-new'), '', ''], 'Policy added'),
+  saveholidays: () => run('saveHolidays', [val('ho-t')], 'Holidays saved'),
+  savesettings: () => { const v = {}; ['cycles', 'daysPerCycle', 'passScore', 'supervisedEarliestCycle', 'strandAverageMin', 'keySkillOccasions', 'behaviourCycles', 'dueSoonDays', 'maxUploadMb', 'maxCases', 'maxGroups', 'maxCasesM4'].forEach(k => { v[k] = val('st-' + k); }); run('saveSettings', [v], 'Settings saved'); },
+  signoff: b => run('principalSignOff', [b.dataset.e], 'Signed off')
+});
+
+/* ---------------- History (R30) ---------------- */
+function vHistory() {
+  if (!UI.history) { call('getHistory', 300).then(h => { UI.history = h; render(); }).catch(e => toast(e.message, true)); return `${pageBanner('History')}<p class="muted">Loading.</p>`; }
+  return `${pageBanner('History', 'Who changed what and when: ratings, readiness, clearance and the task list.')}
+  <div class="tablewrap"><table><thead><tr><th>When</th><th>By</th><th>What</th><th>Record</th><th>Field</th><th>Was</th><th>Now</th></tr></thead><tbody>${UI.history.map(h => `<tr><td class="num">${esc(h.time)}</td><td>${esc(h.by)}</td><td>${esc(h.table)}</td><td>${esc(h.record)}</td><td>${esc(h.field)}</td><td>${esc(h.old)}</td><td>${esc(h.new)}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing yet.</td></tr>'}</tbody></table></div>`;
+}
+
+/* ---------------- Principal: clearance page ---------------- */
+function vClear() {
+  const list = D.trainees;
+  return `${pageBanner('Clearance', 'Trainees in your section who are ready for, or have received, a clearance decision.')}
+  ${list.length ? list.map(t => { const cl = t.clearance, cleared = /^cleared/i.test(t.decision);
+    return `<div class="card"><h3>${esc(t.name)} ${chip(READY_SHORT[t.caseReadiness], t.caseReadiness === 'Independent' ? 'good' : '')}</h3>
+    <p>${meter('Tasks passed', t.progress.passed, t.progress.total)}</p>
+    <ul class="tasklist"><li>${cl.allPassed ? ico('check', 14) : ico('alert', 14)} Every task passed</li><li>${cl.strandsOk ? ico('check', 14) : ico('alert', 14)} Strand averages met</li><li>${cl.keySkillsOk ? ico('check', 14) : ico('alert', 14)} Key Skills met</li><li>${cl.behaviourOk ? ico('check', 14) : ico('alert', 14)} Professional behaviour met</li><li>${!cl.openFlags.length ? ico('check', 14) : ico('alert', 14)} No open safety flags</li></ul>
+    <p>Team Leader’s decision: <b>${esc(t.decision)}</b>${t.decisionDate ? ' on ' + fmtDate(t.decisionDate) : ''}${t.conditions ? '. Conditions: ' + esc(t.conditions) : ''}</p>
+    ${t.signoffDate ? `<p>${chip('Signed off ' + fmtDate(t.signoffDate), 'good')}</p>` : cleared && cl.eligible ? `<button class="btn" data-act="signoff" data-e="${esc(t.email)}">Sign off clearance</button>` : `<p class="hint">You can sign off once the Team Leader has cleared this trainee.</p>`}</div>`; }).join('') : `<div class="center">${emptyArt('reviews')}<h2>No one is ready yet</h2><p class="muted">Trainees appear here once they are eligible for clearance.</p></div>`}`;
+}
+</script>
