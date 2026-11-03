@@ -9,7 +9,7 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | File | Type | Name in the editor | Lines | Size | Last line |
 |---|---|---|---|---|---|
 | `Actions.gs` | Script (.gs) | `Actions` | 173 | 9 KB | `}` |
-| `Admin.gs` | Script (.gs) | `Admin` | 228 | 13 KB | `}` |
+| `Admin.gs` | Script (.gs) | `Admin` | 234 | 14 KB | `}` |
 | `AppAdmin.html` | HTML | `AppAdmin` | 102 | 20 KB | `</script>` |
 | `AppAssess.html` | HTML | `AppAssess` | 80 | 8 KB | `</script>` |
 | `AppCore.html` | HTML | `AppCore` | 128 | 11 KB | `</script>` |

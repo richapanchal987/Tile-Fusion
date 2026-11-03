@@ -405,4 +405,17 @@ t('typed text starting with = is stored as text, not a formula (cell format is p
   assert.ok(found); W.as(ADMIN);
 });
 
+t('a tester enrolled as a trainee can become a mentor/TL once their training is archived, and assess someone else', () => {
+  W.call('enrolTrainee', ['Krishna (testing)', 'krishna@fsksurat.in', {}, '2026-06-01']);
+  W.call('enrolTrainee', ['Praman', 'praman@fsksurat.in', {}, '2026-06-01']);
+  throwsMsg(() => W.api.saveStaff('krishna@fsksurat.in', 'Krishna', 'Assessor', false), /archive their training/);
+  W.call('updateTrainee', ['krishna@fsksurat.in', { active: false }]);
+  W.call('saveStaff', ['krishna@fsksurat.in', 'Krishna', 'Assessor', false]);
+  W.call('updateTrainee', ['praman@fsksurat.in', { mentors: ['krishna@fsksurat.in'], tl: 'krishna@fsksurat.in' }]);
+  me('krishna@fsksurat.in', () => { const b = boot(); assert.strictEqual(b.me.role, 'Assessor'); assert.ok(b.trainees.some(x => x.id === 'praman@fsksurat.in')); });
+  throwsMsg(() => W.api.updateTrainee('krishna@fsksurat.in', { active: true }), /Remove them from Staff/);
+  throwsMsg(() => W.api.enrolTrainee('K', 'krishna@fsksurat.in', {}, '2026-06-01'), /already enrolled/);
+  W.call('updateTrainee', ['praman@fsksurat.in', { active: false }]);
+  W.call('removeStaff', ['krishna@fsksurat.in']);
+});
 console.log('\n' + n + ' server tests passed');

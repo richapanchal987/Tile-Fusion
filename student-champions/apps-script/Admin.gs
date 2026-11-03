@@ -33,8 +33,8 @@ function enrolTrainee(name, email, people, startDate) {
     people = people || {};
     if (!name) throw new Error("Enter the trainee's name.");
     if (!email.endsWith('@' + CONFIG.DOMAIN)) throw new Error('Use their @' + CONFIG.DOMAIN + ' email address.');
-    if (ctx.db.trainees.some(t => t.email === email)) throw new Error('This person is already enrolled.');
-    if (ctx.db.staff.some(s => s.email === email)) throw new Error('This email belongs to a staff member.');
+    if (ctx.db.trainees.some(t => t.email === email)) throw new Error('This person is already enrolled. If their training was archived, open it in Team and tick Active.');
+    if (ctx.db.staff.some(s => s.email === email)) throw new Error('This email belongs to a staff member. Remove them from Staff first.');
     const tr = { email: email, name: name, assessors: checkStaffList_(ctx.db, people.mentors), tl: checkOne_(ctx.db, people.tl),
                  certifier: checkOne_(ctx.db, people.certifier, 'certifier'), start: checkDate_(startDate || todayIso_()),
                  active: true, confirmed: 'notcertified', confirmedBy: '', confirmedAt: '', confirmNote: '' };
@@ -53,7 +53,10 @@ function updateTrainee(email, fields) {
     if (f.tl !== undefined) tr.tl = checkOne_(ctx.db, f.tl);
     if (f.certifier !== undefined) tr.certifier = checkOne_(ctx.db, f.certifier, 'certifier');
     if (f.start !== undefined) tr.start = checkDate_(f.start);
-    if (f.active !== undefined) tr.active = !!f.active;
+    if (f.active !== undefined) {
+      if (f.active && !tr.active && ctx.db.staff.some(s => s.email === tr.email)) throw new Error(tr.name + ' is now on the staff list. Remove them from Staff before making their training active again.');
+      tr.active = !!f.active;
+    }
     upsert_('Trainees', [tr.email], traineeRow_(tr));
     logAction_(ctx.me, 'Updated trainee', tr.email, '', JSON.stringify(f).slice(0, 300));
     return getBootstrap();
@@ -67,7 +70,10 @@ function saveStaff(email, name, role, certifies) {
     if (!email.endsWith('@' + CONFIG.DOMAIN)) throw new Error('Use an @' + CONFIG.DOMAIN + ' email address.');
     if (!name) throw new Error('Enter a name.');
     role = role === 'Admin' ? 'Admin' : 'Assessor';
-    if (ctx.db.trainees.some(t => t.email === email)) throw new Error('This email belongs to a trainee.');
+    // One account has one role at a time. A trainee who has been archived (for example someone who tested the module) can become staff.
+    if (ctx.db.trainees.some(t => t.email === email && t.active)) {
+      throw new Error('This email belongs to a ' + PROGRAMME.words.trainee + ' in the programme. To make them staff, first archive their training: Team, Edit, untick Active.');
+    }
     const current = ctx.db.staff.find(s => s.email === email);
     if (current && current.role === 'Admin' && role !== 'Admin' && ctx.db.staff.filter(s => s.role === 'Admin').length < 2) {
       throw new Error('There must always be at least one admin.');
