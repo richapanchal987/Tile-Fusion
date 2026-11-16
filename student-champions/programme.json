@@ -300,7 +300,8 @@
     "section": "Dummy Session",
     "from": "TIMELINE",
     "to": "Reflection Questions",
-    "exact": true
+    "exact": true,
+    "keep": "timeline"
    }
   ],
   "reflection": [
@@ -399,6 +400,36 @@
     "to": "What to submit",
     "hint": "Classification (Appropriate / Appropriate with Conditions / Not Appropriate) and one line on what you would say or do"
    }
-  ]
+  ],
+  "tables": [
+   {
+    "section": "M2: School, Programme & Essential Sys Knowledge",
+    "match": "2008 - Inception",
+    "answers": "newColumn",
+    "head": "Your answer"
+   },
+   {
+    "section": "M2: School, Programme & Essential Sys Knowledge",
+    "match": "Academic Leadership Team",
+    "answers": "none"
+   },
+   {
+    "section": "M2: School, Programme & Essential Sys Knowledge",
+    "match": "Main Area",
+    "answers": "column",
+    "column": "Status"
+   },
+   {
+    "section": "Career Questions",
+    "match": "In which month are IB MYP",
+    "answers": "labels"
+   },
+   {
+    "section": "Career Questions",
+    "match": "When are the IB MYP",
+    "answers": "labels"
+   }
+  ],
+  "_tables": "Per-table rules, matched by the start of any cell's text. answers: none (no answer boxes), column (boxes only in the named column, such as Status), newColumn (adds a column of boxes headed 'head'), labels (a box beside each short label ending in ':')."
  }
 }

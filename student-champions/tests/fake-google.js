@@ -71,7 +71,7 @@ function makeWorld(opts) {
   const ctx = vm.createContext(sandbox);
   const dir = path.join(__dirname, '..', 'apps-script');
   const files = ['Config.gs', 'Logic.gs', 'SeedData.gs', 'SeedRubrics.gs'].concat(fs.readdirSync(dir).filter(f => /^SeedRubrics\d+\.gs$/.test(f)).sort(),
-    ['Code.gs', 'Store.gs', 'Actions.gs', 'Work.gs', 'Admin.gs', 'DocSync.gs', 'Migrate.gs']);
+    ['Code.gs', 'Store.gs', 'Actions.gs', 'Work.gs', 'Admin.gs', 'DocShape.gs', 'DocSync.gs', 'Migrate.gs']);
   if (opts.reverse) files.reverse();   // proves the app does not depend on the order files are pasted into the editor
   const src = files.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   const names = ['setup', 'getBootstrap', 'getActivityLog', 'saveMyTask', 'saveChecklist', 'uploadEvidence', 'removeEvidence', 'getEvidenceFile', 'assessTask', 'setTaskPlan',
@@ -91,7 +91,7 @@ function makeWorld(opts) {
 // A tiny stand-in for DocumentApp. A doc is built from plain blocks (the same shape DocSync.gs works with),
 // optionally split across tabs, so the Google-facing reader is exercised as well as the converter.
 function docApp(state) {
-  const ET = { PARAGRAPH: 'P', LIST_ITEM: 'L', TABLE: 'T', INLINE_IMAGE: 'I' };
+  const ET = { PARAGRAPH: 'P', LIST_ITEM: 'L', TABLE: 'T', INLINE_IMAGE: 'I', RICH_LINK: 'R' };
   const PH = { TITLE: 'TITLE', HEADING1: 'H1', HEADING2: 'H2', HEADING3: 'H3', HEADING4: 'H4', HEADING5: 'H5', HEADING6: 'H6', NORMAL: 'N' };
   const GT = { NUMBER: 'num', LATIN_UPPER: 'lu', LATIN_LOWER: 'll', ROMAN_UPPER: 'ru', ROMAN_LOWER: 'rl', BULLET: 'bullet' };
   const hmap = { title: PH.TITLE, h1: PH.HEADING1, h2: PH.HEADING2, h3: PH.HEADING3, h4: PH.HEADING4, '': PH.NORMAL };
@@ -102,10 +102,16 @@ function docApp(state) {
     isBold(i) { return !!this._run(i).b; }, isItalic(i) { return !!this._run(i).i; }, getLinkUrl(i) { return this._run(i).link || null; }
   });
   const el = b => {
-    if (b.t === 'p') { const imgs = b.images || 0; return { getType: () => ET.PARAGRAPH, asParagraph() { return this; }, getHeading: () => hmap[b.h || ''], editAsText: () => text(b.runs),
-      getNumChildren: () => imgs, getChild: () => ({ getType: () => ET.INLINE_IMAGE }) }; }
+    // runs marked chip: true are smart chips (a file or page link): not part of the text, a RICH_LINK child instead
+    if (b.t === 'p') { const imgs = b.images || 0, chips = (b.runs || []).filter(r => r.chip), kids = chips.map(r => ({ getType: () => ET.RICH_LINK, asRichLink: () => ({ getTitle: () => r.text, getUrl: () => r.link }) }));
+      for (let i = 0; i < imgs; i++) kids.push({ getType: () => ET.INLINE_IMAGE });
+      return { getType: () => ET.PARAGRAPH, asParagraph() { return this; }, getHeading: () => hmap[b.h || ''], editAsText: () => text((b.runs || []).filter(r => !r.chip)),
+      getNumChildren: () => kids.length, getChild: i => kids[i] }; }
     if (b.t === 'li') return { getType: () => ET.LIST_ITEM, asListItem() { return this; }, getGlyphType: () => b.ordered ? GT.NUMBER : GT.BULLET, getNestingLevel: () => b.level || 0, editAsText: () => text(b.runs) };
-    if (b.t === 'table') { const rows = b.rows.map(r => ({ getNumCells: () => r.length, getCell: c => ({ getNumChildren: () => r[c].length, getChild: i => el(r[c][i]) }) }));
+    // a cell [{t:'merged', dir}] is one Google returns for a merged cell: empty, with a column or row span of 0
+    if (b.t === 'table') { const m = cell => cell.length === 1 && cell[0].t === 'merged' ? cell[0].dir : '';
+      const rows = b.rows.map(r => ({ getNumCells: () => r.length, getCell: c => ({ getNumChildren: () => m(r[c]) ? 0 : r[c].length, getChild: i => el(r[c][i]),
+        getColSpan: () => m(r[c]) === 'col' ? 0 : 1, getRowSpan: () => m(r[c]) === 'row' ? 0 : 1 }) }));
       return { getType: () => ET.TABLE, asTable() { return this; }, getNumRows: () => rows.length, getRow: i => rows[i] }; }
     return { getType: () => 'X' };
   };

@@ -146,7 +146,11 @@ body.intro .task:nth-child(4),body.intro .tile:nth-child(4){animation-delay:.15s
 .docbody .tw{overflow-x:auto;margin:14px 0} .docbody .tw table{display:table;width:100%;min-width:0;margin:0;table-layout:fixed}
 .docbody .tw table:has(td:nth-child(4)){min-width:640px}
 .docbody caption{font-weight:700;text-align:center;padding:6px 0;font-size:14.5px}
-.docbody td{border:1px solid var(--line);padding:6px 9px;vertical-align:top;min-width:90px}
+.docbody td{border:1px solid var(--line);padding:6px 9px;vertical-align:top;min-width:0;overflow-wrap:break-word}
+.docbody td.mrg{border-top-style:hidden}
+.docbody .docbox{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:14px 0;background:var(--surface)}
+.docbody .docbox p:last-child{margin-bottom:0}
+.docbody caption a{font-weight:700}
 .docbody.work{max-height:none;overflow:visible;min-width:0}
 .cols>section,.cols>aside,.task,.tbody,.tbody>*{min-width:0} .tbody{grid-template-columns:minmax(0,1fr)}
 .docbody .dochead{text-align:center;margin:22px 0 10px;font-size:16px;letter-spacing:.02em}

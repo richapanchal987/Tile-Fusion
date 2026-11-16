@@ -1,7 +1,7 @@
 // The converter that turns the Google Doc into safe HTML. Run: node tests/doc.test.js
 const fs = require('fs'), path = require('path'), vm = require('vm'), assert = require('assert');
 const dir = path.join(__dirname, '..', 'apps-script');
-const D = vm.runInNewContext(['Config.gs', 'Logic.gs', 'DocSync.gs'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n') + ';({ docKey_, docBlocksToSections_, blocksToHtml_, listHtml_, DOC_MAX_PART })', {});
+const D = vm.runInNewContext(['Config.gs', 'Logic.gs', 'DocShape.gs'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n') + ';({ docKey_, docBlocksToSections_, blocksToHtml_, listHtml_, DOC_MAX_PART })', {});
 let n = 0; const t = (name, fn) => { fn(); n++; console.log('ok  ' + name); };
 const p = (text, h, extra) => Object.assign({ t: 'p', h: h || '', runs: [{ text }] }, extra);
 const li = (text, level, ordered) => ({ t: 'li', level: level || 0, ordered: !!ordered, runs: [{ text }] });
@@ -123,6 +123,56 @@ t('a case told in one table and answered in the next: each box says which case i
     table([['Case: Academic support is not enough'], ['Details']]), table([['Your Task'], ['What would you do?'], ['']])]);
   assert.strictEqual(s.answers.map(x => x.label).join('|'), 'Case 1 — What would you do?|Case 2 — What would you do?');
   assert.notStrictEqual(s.answers[0].key, s.answers[1].key);
+});
+
+/* ---------- November 2026: merged cells, per-table rules, the 5.2 timeline ---------- */
+const M = dir => [{ t: 'merged', dir: dir }];
+t('merged cells never become answer boxes: a scenario spread across the table is one box with its three questions', () => {
+  const rules = { addAnswersAfter: [{ sections: ['Case'], match: 'issue identification', add: ['What should the Student Champion do?', 'Who else would you involve?'] }] };
+  const row = text => [cell(text)].concat([1, 2, 3, 4, 5].map(() => M('col')));
+  const [s] = conv([title('Case'), { t: 'table', rows: [row('Scenario 1: A student stops eating lunch.'), row('Issue identification:'), row('')] }], rules);
+  assert.strictEqual(s.answers.length, 3, s.answers.map(x => x.label).join('|'));
+  const h = s.parts.join(''); assert.ok(h.includes('class="docbox"') && !h.includes('<table'), 'read as text in a box, not as columns');
+});
+t('a table read without merge information: empty columns in every row are dropped (the same scenario, as Google sometimes reports it)', () => {
+  const rules = { addAnswersAfter: [{ sections: ['Case'], match: 'issue identification', add: ['What should the Student Champion do?'] }] };
+  const row = text => [cell(text), [], [], [], []];
+  const [s] = conv([title('Case'), { t: 'table', rows: [row('Scenario 2: Two friends fall out.'), row('Issue identification:'), row('')] }], rules);
+  assert.strictEqual(s.answers.map(x => x.label).join('|'), 'Scenario 2 — Issue identification|Scenario 2 — What should the Student Champion do?');
+});
+t('a question merged across the top of a table becomes its title, with no box beside it; "MYP:" and "DP:" each get a box when the rule says so', () => {
+  const tb = { t: 'table', rows: [[cell('In which month are IB MYP & DP examinations held?'), M('col')], [cell('MYP:'), cell('DP:')]] };
+  const [plain] = conv([title('Talk'), tb]);
+  assert.strictEqual(plain.answers.length, 0, 'no box beside the question');
+  const [s] = conv([title('Talk'), tb], { tables: [{ section: 'Talk', match: 'In which month', answers: 'labels' }] });
+  assert.strictEqual(s.answers.map(x => x.label).join('|'), 'In which month are IB MYP & DP examinations held? — MYP|In which month are IB MYP & DP examinations held? — DP');
+  assert.ok(s.parts.join('').includes('<caption>In which month'));
+});
+t('table rules: no boxes in a reference table; boxes only in the Status column; a new answer column beside "Currently"', () => {
+  const rules = { tables: [{ section: 'Talk', match: 'Term', answers: 'none' }, { section: 'Talk', match: 'Main Area', answers: 'column', column: 'Status' },
+    { section: 'Talk', match: '2008', answers: 'newColumn', head: 'Your answer' }] };
+  const vocab = table([['Term', 'Acronym', 'Definition'], ['Academic Leadership Team', 'ALT', ''], ['Open House', '', '']]);
+  const ict = { t: 'table', rows: [[cell('Main Area - Intranet'), M('col'), M('col')], [cell('Sub- area'), cell('Task'), cell('Status')],
+    [cell('Koha'), cell('1. Search for books'), cell('Not started')], [M('row'), cell('2. Issue a book'), M('row')], [cell('Sub- area'), cell('Task'), []]] };
+  const stats = table([['2008 - Inception', 'Currently (fill this out)'], ['Students : 200', 'Students : '], ['Teaching staff : 8', 'Teaching staff : ']]);
+  const [s] = conv([title('Talk'), vocab, ict, stats], rules);
+  assert.strictEqual(s.answers.map(x => x.label).join('|'), '1. Search for books — Status|Students — Your answer|Teaching staff — Your answer');
+  assert.ok(s.parts.join('').includes('data-p="Not started"'), 'the doc\'s "Not started" is the placeholder');
+  assert.ok(s.parts.join('').includes('<b>Your answer</b>') || s.parts.join('').includes('<strong>Your answer</strong>'));
+});
+t('the 5.2 timeline: cut from the text, its stages kept to start the TL\'s timeline', () => {
+  const rules = { cut: [{ section: 'Talk', from: 'TIMELINE', to: 'Reflection Questions', exact: true, keep: 'timeline' }] };
+  const [s] = conv([title('Talk'), p('TIMELINE', 'h1'), table([['Stage', 'Deadline'], ['Topic approved', 'To be set with mentor/TL'], ['Pitch to the team', 'To be set with mentor/TL']]), p('Reflection Questions', 'h3')], rules);
+  assert.strictEqual(s.timeline, 'Topic approved: To be set with mentor/TL\nPitch to the team: To be set with mentor/TL');
+  assert.ok(!s.parts.join('').includes('Topic approved'));
+});
+t('non-breaking spaces from pasted web text become ordinary spaces, so lines can wrap', () => {
+  const [s] = conv([title('Notes'), p('drawing,\u00a0painting,\u00a0sculpture')]);
+  assert.strictEqual(s.parts[0], '<p>drawing, painting, sculpture</p>');
+});
+t('a long word or link in a narrow column wraps instead of running out of the box (CSS rule present)', () => {
+  const css = fs.readFileSync(path.join(dir, 'Styles2.html'), 'utf8');
+  assert.ok(/\.docbody td\{[^}]*overflow-wrap:break-word/.test(css));
 });
 
 console.log('\n' + n + ' tests passed');

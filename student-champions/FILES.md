@@ -17,13 +17,14 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `AppFiles.html` | HTML | `AppFiles` | 88 | 8 KB | `</script>` |
 | `AppTeam.html` | HTML | `AppTeam` | 52 | 8 KB | `</script>` |
 | `AppTrainee.html` | HTML | `AppTrainee` | 212 | 23 KB | `</script>` |
-| `AppWork.html` | HTML | `AppWork` | 137 | 11 KB | `</script>` |
+| `AppWork.html` | HTML | `AppWork` | 140 | 12 KB | `</script>` |
 | `Art.html` | HTML | `Art` | 75 | 7 KB | `</script>` |
 | `Code.gs` | Script (.gs) | `Code` | 292 | 16 KB | `}` |
-| `Config.gs` | Script (.gs) | `Config` | 19 | 8 KB | `};` |
-| `DocSync.gs` | Script (.gs) | `DocSync` | 446 | 23 KB | `}` |
+| `Config.gs` | Script (.gs) | `Config` | 19 | 9 KB | `};` |
+| `DocShape.gs` | Script (.gs) | `DocShape` | 318 | 18 KB | `}` |
+| `DocSync.gs` | Script (.gs) | `DocSync` | 190 | 11 KB | `}` |
 | `Index.html` | HTML | `Index` | 26 | 1 KB | `</html>` |
-| `Logic.gs` | Script (.gs) | `Logic` | 445 | 23 KB | `}` |
+| `Logic.gs` | Script (.gs) | `Logic` | 447 | 23 KB | `}` |
 | `Migrate.gs` | Script (.gs) | `Migrate` | 48 | 3 KB | `}` |
 | `SeedData.gs` | Script (.gs) | `SeedData` | 57 | 21 KB | `};` |
 | `SeedRubrics.gs` | Script (.gs) | `SeedRubrics` | 18 | 6 KB | `const SEED_RUBRIC_PARTS = () => [SEED_RUBRICS_1, SEED_RUBRICS_2, SEED_` |
@@ -32,5 +33,5 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `SeedRubrics3.gs` | Script (.gs) | `SeedRubrics3` | 37 | 4 KB | `];` |
 | `Store.gs` | Script (.gs) | `Store` | 110 | 6 KB | `}` |
 | `Styles.html` | HTML | `Styles` | 214 | 19 KB | `</style>` |
-| `Styles2.html` | HTML | `Styles2` | 192 | 16 KB | `</style>` |
-| `Work.gs` | Script (.gs) | `Work` | 55 | 3 KB | `}` |
+| `Styles2.html` | HTML | `Styles2` | 196 | 16 KB | `</style>` |
+| `Work.gs` | Script (.gs) | `Work` | 59 | 3 KB | `}` |

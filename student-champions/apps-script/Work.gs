@@ -38,7 +38,11 @@ function getTaskWork(traineeEmail, taskId) {
   const task = ctx.db.tasks.find(x => x.id === String(taskId).trim());
   if (!task) throw new Error('That task is not part of the programme.');
   const work = readWork_(ctx.tr.email, task.id), pr = promptsFor_(ctx.db, task);
-  return { a: work.a, r: work.r, at: work.at, answers: pr.answers, reflection: pr.reflection };
+  // Answers typed into boxes that the module text no longer has (it was edited) are kept and shown, never lost
+  const current = {}, labels = {};
+  pr.answers.forEach(q => { current[q.key] = true; }); pr.earlier.forEach(q => { labels[q.key] = q.label; });
+  const earlier = Object.keys(work.a).filter(k => !current[k] && String(work.a[k]).trim()).map(k => ({ key: k, label: labels[k] || 'Answer', text: work.a[k] }));
+  return { a: work.a, r: work.r, at: work.at, answers: pr.answers, reflection: pr.reflection, earlier: earlier };
 }
 
 /** A mentor, TL, certifying mentor or admin adds a review comment on a task. The trainee can read it. */

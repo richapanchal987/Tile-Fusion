@@ -159,7 +159,9 @@ function promptsFor_(db, task) {
   const reflection = rows.filter(x => x.kind === 'r').map(x => ({ key: x.key, label: x.label, group: x.group }));
   return {
     answers: rows.filter(x => x.kind === 'a').map(x => ({ key: x.key, label: x.label })),
-    reflection: reflection.length ? reflection : [{ key: 'r-default', label: PROGRAMME.defaultReflection, group: '' }]
+    reflection: reflection.length ? reflection : [{ key: 'r-default', label: PROGRAMME.defaultReflection, group: '' }],
+    timeline: (rows.find(x => x.kind === 't') || {}).label || '',
+    earlier: rows.filter(x => x.kind === 'o').map(x => ({ key: x.key, label: x.label }))
   };
 }
 const filled_ = (map, list) => list.filter(q => String((map || {})[q.key] || '').trim()).length;
@@ -337,7 +339,7 @@ function buildBootstrap_(db, me, todayIso, appConfig) {
         id: t.id, topic: t.topic, cycle: t.cycle, name: staff ? t.name : (t.traineeName || t.name), traineeName: staff ? t.traineeName : '', type: t.type, what: t.what,
         evidence: t.evidence, standard: staff ? t.standard : '', weight: t.weight, gate: staff ? t.gate : false, active: t.active, order: t.order,
         ai: t.ai, real: t.real, students: t.students, doc: t.doc, timeline: t.timeline,
-        refl: pr.reflection, nAnswers: pr.answers.length,
+        refl: pr.reflection, nAnswers: pr.answers.length, tlTemplate: t.timeline ? pr.timeline : '',
         phase: topicPhase[t.topic] || '', w: Math.round((eff[t.id] || 0) * 10) / 10
       };
     }),

@@ -1,4 +1,4 @@
-// Runs the real server code (Code.gs, Actions.gs, Admin.gs, DocSync.gs) against fake Google services. Run: node tests/server.test.js
+// Runs the real server code (Code.gs, Actions.gs, Admin.gs, DocShape.gs, DocSync.gs) against fake Google services. Run: node tests/server.test.js
 const assert = require('assert'), { makeWorld } = require('./fake-google');
 let n = 0; const t = (name, fn) => { fn(); n++; console.log('ok  ' + name); };
 const throwsMsg = (fn, re) => assert.throws(fn, re);
@@ -405,6 +405,36 @@ t('typed text starting with = is stored as text, not a formula (cell format is p
   assert.ok(found); W.as(ADMIN);
 });
 
+t('reading the real doc: a file chip keeps its title and link; merged cells give no boxes; the 5.2 timeline starts from the doc\'s stages', () => {
+  W.as(ADMIN);
+  const cell = text => [{ t: 'p', runs: [{ text: text }] }], M = [{ t: 'merged', dir: 'col' }];
+  W.state.doc = { tabs: [
+    { title: 'Books, Videos & Articles', blocks: [{ t: 'table', rows: [
+      [[{ t: 'p', runs: [{ text: 'becoming a self-regulated learner.pdf', chip: true, link: 'https://drive.google.com/file/d/abc/view' }] }], M],
+      [cell('One idea that stood out'), []]] }] },
+    { title: 'Dummy Session', blocks: [{ t: 'p', h: 'h1', runs: [{ text: 'TIMELINE' }] },
+      { t: 'table', rows: [[cell('Stage'), cell('Deadline')], [cell('Topic approved'), cell('To be set with mentor/TL')]] },
+      { t: 'p', h: 'h3', runs: [{ text: 'Reflection Questions' }] }, { t: 'li', runs: [{ text: 'What went well?' }] }, { t: 'p', runs: [{ text: 'Discuss your reflection with your TL.' }] }] }] };
+  W.call('refreshModuleText', []);
+  const h = W.call('getContent', ['Books, Videos & Articles']).html;
+  assert.ok(h.includes('href="https://drive.google.com/file/d/abc/view"') && h.includes('becoming a self-regulated learner<') && !h.includes('.pdf<'), 'the chip is a link, without ".pdf"');
+  const w = W.call('getTaskWork', ['bina@fsksurat.in', '3.1']);
+  assert.strictEqual(w.answers.map(x => x.label).join('|'), 'becoming a self-regulated learner — One idea that stood out', 'one box, none beside the title');
+  const b = boot(); assert.strictEqual(b.tasks.find(x => x.id === '5.2').tlTemplate, 'Topic approved: To be set with mentor/TL');
+  const ds = W.call('getContent', ['Dummy Session']); assert.ok(ds.found && !ds.html.includes('Topic approved'));
+});
+t('answers typed into a box that a later doc edit removes are kept and shown as earlier answers, for the trainee and the mentor', () => {
+  W.as(ADMIN); W.call('enrolTrainee', ['Esha', 'esha@fsksurat.in', { mentors: ['mentor@fsksurat.in'] }, '2026-06-01']);
+  const k = W.call('getTaskWork', ['esha@fsksurat.in', '3.1']).answers[0].key;
+  me('esha@fsksurat.in', () => W.call('autosaveTask', ['3.1', { a: { [k]: 'Self-regulation starts with small goals.' } }]));
+  W.as(ADMIN); W.state.doc = { tabs: [{ title: 'Books, Videos & Articles', blocks: [{ t: 'p', runs: [{ text: 'The reading list has changed.' }] }] }, { title: 'Viva', blocks: [{ t: 'p', runs: [{ text: 'Viva text' }] }] }] };
+  W.call('refreshModuleText', []); W.call('refreshModuleText', []);      // twice: the label survives more than one refresh
+  for (const who of ['esha@fsksurat.in', 'mentor@fsksurat.in', ADMIN]) me(who, () => {
+    const w = W.call('getTaskWork', ['esha@fsksurat.in', '3.1']);
+    assert.strictEqual(w.answers.length, 0);
+    assert.deepStrictEqual(w.earlier.map(x => x.label + ': ' + x.text), ['becoming a self-regulated learner — One idea that stood out: Self-regulation starts with small goals.']);
+  });
+});
 t('a tester enrolled as a trainee can become a mentor/TL once their training is archived, and assess someone else', () => {
   W.call('enrolTrainee', ['Krishna (testing)', 'krishna@fsksurat.in', {}, '2026-06-01']);
   W.call('enrolTrainee', ['Praman', 'praman@fsksurat.in', {}, '2026-06-01']);

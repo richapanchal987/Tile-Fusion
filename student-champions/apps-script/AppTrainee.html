@@ -159,7 +159,7 @@ function planBox(tr,t,p){
   return`<div class="planbox" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}"><h4>Agree the plan for this task</h4>
     <div class="formgrid"><div class="field"><label for="pd-${sl}">Due date</label><input type="date" id="pd-${sl}" data-plan="due" value="${esc(p.due||'')}"></div>
     <div class="field"><label for="pa-${sl}">AI tools</label><select id="pa-${sl}" data-plan="ai"><option value="" ${k===''?'selected':''}>Task default: ${esc(D.config.aiOptions[t.ai||'ask'][0])}</option>${Object.keys(D.config.aiOptions).map(a=>`<option value="${a}" ${k===a?'selected':''}>${esc(D.config.aiOptions[a][0])}</option>`).join('')}</select></div></div>
-    ${t.timeline?`<div class="field"><label for="pt-${sl}">Timeline for ${esc(tr.name)}</label><textarea id="pt-${sl}" data-plan="timeline" rows="4" placeholder="For example: Topic agreed 3 Nov. Session plan 10 Nov. Dummy session 14 Nov.">${esc(p.timeline||'')}</textarea></div>`:''}
+    ${t.timeline?`<div class="field"><label for="pt-${sl}">Timeline for ${esc(tr.name)}</label><textarea id="pt-${sl}" data-plan="timeline" rows="7">${esc(p.timeline||t.tlTemplate||'')}</textarea><span class="hint">${p.timeline?'':'Starts from the stages in the module. Replace &ldquo;To be set with mentor/TL&rdquo; with the dates for '+esc(tr.name)+', then save.'}</span></div>`:''}
     <div class="row"><button class="btn small" data-act="plan">Save plan</button><span class="hint">${esc(WD.trainee)} sees the date, the AI setting${t.timeline?' and the timeline':''} on the task.</span></div></div>`;
 }
 
@@ -191,7 +191,7 @@ function taskCard(tr,t,mine){
   if(staff&&(p.status==='partial'||p.status==='rework')&&left<=0&&isAdmin())block+=`<div class="row"><button class="btn ghost small" data-act="grant" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}">Allow another reattempt</button></div>`;
   if(staff)block+=planBox(tr,t,p)+assessForm(tr,t,p);
   const aiTip=D.config.aiOptions[ak][1],open=openSet.has(key),edit=mine&&editable;
-  const tl=t.timeline?`<p class="timeline">${p.timeline?esc(p.timeline):`<span class="hint">${staff?'No timeline yet. Add it in the plan below.':'Your TL will add your timeline here.'}</span>`}</p>`:'';
+  const tl=t.timeline?`<h5>Timeline</h5><p class="timeline">${esc(p.timeline||t.tlTemplate||'')}</p>${p.timeline?'':`<p class="hint">${staff?'Not set for '+esc(tr.name)+' yet. Set the dates in the plan below.':'Your TL will set the dates for you.'}</p>`}`:'';
   return`<details class="task" data-key="${esc(key)}" style="${pcv(t.cycle)}" ${open?'open':''}>
     <summary><span class="tid">${esc(t.id)}</span><span class="tname">${esc(t.name)}</span>
       <span class="pills">${t.gate&&staff?`<span class="pill gate">${ico('shield',13)}Critical gate</span>`:''}${ds?`<span class="pill due-${ds}">${ico('calendar',13)}${dueText(p)}</span>`:''}<span class="pill s-${p.status}">${STATUS_ICON[p.status]?ico(STATUS_ICON[p.status],13):''}${STATUS[p.status]}</span></span>

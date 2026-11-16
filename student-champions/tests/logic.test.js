@@ -1,7 +1,7 @@
 // Run: node tests/logic.test.js   (no dependencies)
 const fs = require('fs'), path = require('path'), vm = require('vm'), assert = require('assert');
 const dir = path.join(__dirname, '..', 'apps-script');
-const files = ['Config.gs', 'Logic.gs', 'SeedData.gs', 'DocSync.gs'];
+const files = ['Config.gs', 'Logic.gs', 'SeedData.gs', 'DocShape.gs'];
 const load = list => vm.runInNewContext(list.map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n') + `;({ buildCalendar_, expectedCycle_, effectiveWeights_,
   computeStats_, buildBootstrap_, validateAssessment_, validateCertification_, validateChecklist_, validateDue_, statsForTrainee_, normaliseDate_, addMonths_,
   workingDaysElapsed_, visibleTo_, extOk_, safeFileName_, phaseRanges_, moduleShare_, aiOf_, failedAllowed_, promptsFor_, submitProblem_, statsForTraineeView_, SEED, PROGRAMME })`, {});

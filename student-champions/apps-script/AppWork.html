@@ -19,13 +19,15 @@ function loadOpenWork(){
 }
 
 /* ---------- answer boxes inside the module text ---------- */
-const ANS_RE=/<div class="ansbox" data-k="([^"]*)" data-l="([^"]*)" data-r="(\d+)" data-s="([01])"(?: data-h="([^"]*)")?><\/div>/g;
+const ANS_RE=/<div class="ansbox"((?: data-[a-z]="[^"]*")*)><\/div>/g;
+const ansAttrs=a=>{const o={};a.replace(/ data-([a-z])="([^"]*)"/g,(m,k,v)=>{o[k]=v});return o};   // values arrive escaped
 function fillAnswers(html,trid,t,edit){
   const w=WORK[wk(trid,t.id)],sl=slug(trid+'_'+t.id);
-  return html.replace(/<table>/g,'<div class="tw"><table>').replace(/<\/table>/g,'</table></div>').replace(ANS_RE,(m,k,l,r,s,h)=>{   // label and hint arrive escaped
+  return html.replace(/<table>/g,'<div class="tw"><table>').replace(/<\/table>/g,'</table></div>').replace(ANS_RE,(m,attrs)=>{
+    const x=ansAttrs(attrs),k=x.k||'',l=x.l||'',r=x.r||3,s=x.s,h=x.h,ph=x.p;   // k key, l label, r rows, s show label, h hint, p placeholder
     const v=w?String(w.a[k]||''):'',id='aw-'+sl+'-'+k;
-    if(edit)return`<div class="ans${s==='1'?' shown':''}">${s==='1'?`<label for="${id}">${l}</label>`:''}${h?`<span class="hint">${h}</span>`:''}<textarea id="${id}" rows="${r}" data-w="a" data-k="${k}" data-t="${esc(t.id)}" ${s==='1'?'':`aria-label="${l}"`} ${w?'':'disabled'} placeholder="${w?'Type your answer':'Loading…'}">${esc(v)}</textarea></div>`;
-    return`<div class="ans ro">${s==='1'?`<b>${l}</b>`:''}<p class="${v?'':'hint'}">${w?(v?esc(v):'Not answered'):'Loading…'}</p></div>`;
+    if(edit)return`<div class="ans${s==='1'?' shown':''}">${s==='1'?`<label for="${id}">${l}</label>`:''}${h?`<span class="hint">${h}</span>`:''}<textarea id="${id}" rows="${r}" data-w="a" data-k="${k}" data-t="${esc(t.id)}" ${s==='1'?'':`aria-label="${l}"`} ${w?'':'disabled'} placeholder="${w?(ph||'Type your answer'):'Loading…'}">${esc(v)}</textarea></div>`;
+    return`<div class="ans ro">${s==='1'?`<b>${l}</b>`:''}<p class="${v?'':'hint'}">${w?(v?esc(v):(ph||'Not answered')):'Loading…'}</p></div>`;
   });
 }
 /** The module text of a task, open while the task is open. A trainee types straight into its answer boxes. */
@@ -35,7 +37,8 @@ function taskText(trid,t,edit){
   const body=!d?'<p class="hint">Loading the module text…</p>':d.found?`<div class="docbody work">${fillAnswers(d.html,trid,t,edit)}</div>`:`<p class="note amber">${d.err?esc(d.err):'This section is not in the app yet. An admin can press &ldquo;Refresh from the doc&rdquo; in Curriculum.'}</p>`;
   const n=t.nAnswers,w=WORK[wk(trid,t.id)];
   const count=n?`<p class="hint" data-cnt="a|${esc(t.id)}">${w?answerCount(w,n):''}</p>`:'';
-  return`<div class="kv"><h4>Module text${n?' and your answers':''}</h4>${n&&edit?`<p class="hint">Type your answers in the boxes in the text. They are optional; fill in what shows your thinking.</p>`:''}${count}${body}</div>`;
+  const old=w&&(w.earlier||[]).length?`<div class="kv earlier"><h4>Answers from before the module text changed</h4><p class="hint">${edit?'The module text was updated, so these answers no longer have a box. Copy anything you still need into the boxes below.':'Typed before the module text was updated; they no longer have a box.'}</p>${w.earlier.map(q=>`<div class="ans ro"><b>${esc(q.label)}</b><p>${esc(q.text)}</p></div>`).join('')}</div>`:'';
+  return old+`<div class="kv"><h4>Module text${n?' and your answers':''}</h4>${n&&edit?`<p class="hint">Type your answers in the boxes in the text. They are optional; fill in what shows your thinking.</p>`:''}${count}${body}</div>`;
 }
 const answerCount=(w,n)=>`${filledN(w.a,w.answers||[])} of ${n} answer box${n===1?'':'es'} filled.`;
 
@@ -122,8 +125,7 @@ async function submitTask(form){
 /* ---------- review comments ---------- */
 function commentsBox(tr,t){
   const cs=(tr.comments||[]).filter(c=>c.task===t.id),staff=isStaff(),sl=slug(tr.id+'_'+t.id);
-  if(!cs.length&&!staff)return'';
-  return`<div class="kv comments"><h4>${ico('users',16)} Review comments</h4>${cs.length?`<ul class="cmts">${cs.map(c=>`<li><p>${esc(c.text)}</p><span class="hint">${esc(c.name)}, ${fmtDate(c.at)}</span></li>`).join('')}</ul>`:'<p class="hint">No comments yet.</p>'}
+  return`<div class="kv comments"><h4>${ico('users',16)} TL, mentor and SC review and comments</h4>${cs.length?`<ul class="cmts">${cs.map(c=>`<li><p>${esc(c.text)}</p><span class="hint">${esc(c.name)}, ${fmtDate(c.at)}</span></li>`).join('')}</ul>`:`<p class="hint">${staff?'No comments yet.':'Comments from your TL, mentor or an experienced Student Champion will appear here.'}</p>`}
     ${staff?`<div class="cmform" data-tr="${esc(tr.id)}" data-t="${esc(t.id)}"><div class="field"><label for="cm-${sl}">Add a comment for ${esc(tr.name)}</label><textarea id="cm-${sl}" data-f="comment" rows="2">${esc(dv(tr.id,t.id,'comment',''))}</textarea></div><div class="row"><button class="btn small" data-act="comment">Add comment</button><span class="hint">${esc(WD.trainee)} sees it on this task.</span></div></div>`:''}</div>`;
 }
 
@@ -132,6 +134,7 @@ function workSummary(tr,t){
   const w=WORK[wk(tr.id,t.id)],need=`<span data-needwork data-tr="${esc(tr.id)}" data-t="${esc(t.id)}"></span>`;
   if(!w)return`<div class="kv">${need}<h4>Answers and reflection</h4><p class="hint">Loading…</p></div>`;
   const ans=(w.answers||[]).filter(q=>String(w.a[q.key]||'').trim());
-  return`<div class="kv">${need}<h4>Answers <span class="hint">${ans.length} of ${(w.answers||[]).length} filled</span></h4>${ans.map(q=>`<div class="ans ro"><b>${esc(q.label)}</b><p>${esc(w.a[q.key])}</p></div>`).join('')||'<p class="hint">No typed answers.</p>'}</div>${reflectionBox(tr.id,t,false)}`;
+  const old=(w.earlier||[]).map(q=>`<div class="ans ro"><b>${esc(q.label)} <span class="hint">(before the module text changed)</span></b><p>${esc(q.text)}</p></div>`).join('');
+  return`<div class="kv">${need}<h4>Answers <span class="hint">${ans.length} of ${(w.answers||[]).length} filled</span></h4>${ans.map(q=>`<div class="ans ro"><b>${esc(q.label)}</b><p>${esc(w.a[q.key])}</p></div>`).join('')||(old?'':'<p class="hint">No typed answers.</p>')}${old}</div>${reflectionBox(tr.id,t,false)}`;
 }
 </script>
