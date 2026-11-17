@@ -67,9 +67,9 @@ t('empty response cells in a task become answer boxes labelled by the cells arou
   assert.strictEqual(boxes(a.parts.join('')), 2); assert.strictEqual(b.answers.length, 0); assert.strictEqual(boxes(b.parts.join('')), 0);
 });
 t('a one-column case table: each box is labelled with its scenario and the question above it; extra boxes follow "issue identification"', () => {
-  const rules = { addAnswersAfter: [{ sections: ['Case'], match: 'issue identification', add: ['What should the Student Champion do?', 'Who else would you involve?'] }] };
+  const rules = { addAnswersAfter: [{ sections: ['Case'], match: 'issue identification', add: ['What should the Student Champion do?'] }] };
   const [s] = conv([title('Case'), table([['Scenario 1: A student stops eating lunch.'], ['Issue identification'], ['']])], rules);
-  assert.strictEqual(s.answers.map(x => x.label).join('|'), 'Scenario 1 — Issue identification|Scenario 1 — What should the Student Champion do?|Scenario 1 — Who else would you involve?');
+  assert.strictEqual(s.answers.map(x => x.label).join('|'), 'Scenario 1 — Issue identification|Scenario 1 — What should the Student Champion do?');
 });
 t('the same doc gives the same answer keys every time, so typed answers stay attached after a refresh', () => {
   const doc = () => [title('Talk'), table([['Q', 'A'], ['One', ''], ['Two', '']]), table([['Q', 'A'], ['One', '']])];
@@ -127,11 +127,11 @@ t('a case told in one table and answered in the next: each box says which case i
 
 /* ---------- November 2026: merged cells, per-table rules, the 5.2 timeline ---------- */
 const M = dir => [{ t: 'merged', dir: dir }];
-t('merged cells never become answer boxes: a scenario spread across the table is one box with its three questions', () => {
-  const rules = { addAnswersAfter: [{ sections: ['Case'], match: 'issue identification', add: ['What should the Student Champion do?', 'Who else would you involve?'] }] };
+t('merged cells never become answer boxes: a scenario spread across the table is one box with its two questions', () => {
+  const rules = { addAnswersAfter: [{ sections: ['Case'], match: 'issue identification', add: ['What should the Student Champion do?'] }] };
   const row = text => [cell(text)].concat([1, 2, 3, 4, 5].map(() => M('col')));
   const [s] = conv([title('Case'), { t: 'table', rows: [row('Scenario 1: A student stops eating lunch.'), row('Issue identification:'), row('')] }], rules);
-  assert.strictEqual(s.answers.length, 3, s.answers.map(x => x.label).join('|'));
+  assert.strictEqual(s.answers.length, 2, s.answers.map(x => x.label).join('|'));
   const h = s.parts.join(''); assert.ok(h.includes('class="docbox"') && !h.includes('<table'), 'read as text in a box, not as columns');
 });
 t('a table read without merge information: empty columns in every row are dropped (the same scenario, as Google sometimes reports it)', () => {

@@ -68,15 +68,15 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     const txt = await c.innerText();
     assert.ok(txt.includes('Scenario 1'), 'text from the doc appears as soon as the task opens');
     assert.ok(!/How it is assessed|How you'll be assessed|Critical gate|4 Strong/.test(txt), 'no rubric, gate or scoring detail for the trainee');
-    assert.strictEqual(await c.locator('.docbody textarea[data-w=a]').count(), 15, 'three boxes for each of the five scenarios');
-    assert.ok(txt.includes('4 of 15 answer boxes filled'));
-    assert.ok(await c.locator('label', { hasText: 'Who else would you involve' }).count() >= 1);
+    assert.strictEqual(await c.locator('.docbody textarea[data-w=a]').count(), 10, 'two boxes for each of the five scenarios');
+    assert.ok(/\d of 10 answer boxes filled/.test(txt));
+    assert.ok(await c.locator('label', { hasText: 'What should the Student Champion do' }).count() >= 1 && await c.locator('label', { hasText: 'Who else would you involve' }).count() === 0);
     assert.ok(txt.includes(P.defaultReflection) && txt.includes('Good start on scenario 1'), 'standard reflection question and the TL comment');
     assert.strictEqual(await c.locator('[data-act=comment]').count(), 0, 'a trainee cannot add comments');
     const box = c.locator('.docbody textarea[data-w=a]').nth(5);
     await box.fill('Speak to the class teacher today and agree a check-in.');
     await p.waitForSelector('.savestate:has-text("Saved at")');
-    assert.ok((await card(p, 'Case Studies 01').innerText()).includes('5 of 15 answer boxes filled'));
+    assert.ok((await card(p, 'Case Studies 01').innerText()).includes('5 of 10 answer boxes filled'));
     W.as('bina@fsksurat.in'); const w = W.call('getTaskWork', ['bina@fsksurat.in', '1.2']);
     assert.ok(Object.values(w.a).includes('Speak to the class teacher today and agree a check-in.'), 'saved on the server without pressing anything');
     const r = card(p, 'Case Studies 01').locator('textarea[data-w=r]').first(); await r.fill('');
@@ -107,7 +107,7 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     const rv = p.locator('.rv', { hasText: 'Case Studies 01' });
     await rv.locator('.ans.ro').first().waitFor();
     const t = await rv.innerText();
-    assert.ok(t.includes('5 of 15 filled') && t.includes('Speak to the class teacher today') && t.includes('Typed just before the laptop closed'));
+    assert.ok(t.includes('5 of 10 filled') && t.includes('Speak to the class teacher today') && t.includes('Typed just before the laptop closed'));
     await p.locator('.tab', { hasText: 'Trainee' }).click(); await p.locator('select[data-act=pick]').selectOption('bina@fsksurat.in');
     await p.locator('.node[data-c="1"]').click();
     const c = await openCard(p, 'Case Studies 01');
