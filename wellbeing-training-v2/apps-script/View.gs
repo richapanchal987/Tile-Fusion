@@ -75,6 +75,7 @@ function traineeBootstrap_(db, me, today, out) {
   out.keySkills = db.keySkills.map(k => { const s = calc.clearance.keySkills.find(x => x.n === k.n) || {}; return { n: k.n, name: k.name, rule: k.rule, linked: k.linked, occasions: s.occasions || 0, real: s.real || 0, ok: !!s.ok, rubricLink: k.rubricLink }; });
   out.supervision = db.supervision.filter(x => x.trainee === tr.email).map(x => ({ id: x.id, date: x.date, type: x.type, code: x.code }));
   out.limits = caseLimits_(db, tr, calc);
+  out.alerts = alertsFor_(db, me, tr, calc, today);
   out.toolkit = db.toolkit; out.rubrics = db.rubrics; out.milestones = milestoneRows_(db);
   return out;
 }
@@ -92,7 +93,7 @@ function staffTraineeView_(db, tr, me, today, cover) {
 
 function tlBootstrap_(db, me, today, out) {
   out.trainees = db.trainees.map(tr => staffTraineeView_(db, tr, me, today, tr.section !== me.section));
-  out.catalogue = db.rawTasks; out.links = db.links;
+  out.catalogue = db.rawTasks; out.links = db.links; out.contentFlags = contentFlags_(db); out.alerts = alertsFor_(db, me, null, null, today);
   out.milestones = milestoneRows_(db); out.keySkills = db.keySkills; out.toolkit = db.toolkit; out.rubrics = db.rubrics; out.policies = db.policies;
   out.staff = db.users.filter(u => u.active).map(u => ({ email: u.email, name: u.name, role: u.role, section: u.section }));
   out.settings = db.settings;
@@ -112,6 +113,7 @@ function coordBootstrap_(db, me, today, out) {
   out.reliability = [];
   Object.keys(db.behaviour).forEach(e => db.behaviour[e].forEach(b => out.reliability.push({ trainee: e, cycle: b.cycle, text: b.reliability })));
   out.users = db.users; out.settings = db.settings; out.policies = db.policies; out.holidays = db.holidays; out.milestones = milestoneRows_(db);
+  out.alerts = alertsFor_(db, me, null, null, today); out.calendar = referenceCalendar_(db, today);
   out.catalogueCount = db.tasks.filter(t => t.active).length; out.imported = !!db.settings.importedAt;
   return out;
 }
@@ -124,6 +126,7 @@ function principalBootstrap_(db, me, today, out) {
     return { id: tr.id, name: tr.name, email: tr.email, start: tr.start, caseReadiness: tr.caseReadiness, decision: tr.decision, decisionDate: tr.decisionDate, conditions: tr.conditions, signoffDate: tr.signoffDate,
              eligible: c.clearance.eligible, progress: c.progress, clearance: c.clearance };
   }).filter(x => x.eligible || x.decision !== 'Pending' || x.caseReadiness === 'Independent');
+  out.alerts = alertsFor_(db, me, null, null, today);
   return out;
 }
 
@@ -149,4 +152,12 @@ function caseLimits_(db, tr, calc) {
 function linksFor_(db, taskId, asStaff, section) {
   const other = section === 'Junior School' ? /senior/i : section === 'Senior School' ? /junior/i : null;
   return db.links.filter(l => l.task === taskId && (asStaff || l.see === 'Trainee') && !(other && l.type === 'Nucleus form' && (other.test(l.name) || other.test(l.url)))).map(l => ({ type: l.type, name: l.name, title: l.title, url: l.url }));
+}
+
+/** The cycles for the earliest active trainee (or the next Monday), so the Coordinator can see what a holiday does to the dates. */
+function referenceCalendar_(db, today) {
+  const starts = db.trainees.filter(t => t.status !== 'Completed' && t.status !== 'Left' && t.start).map(t => t.start).sort();
+  let start = starts[0];
+  if (!start) { let d = isoToUtc_(today); while (d.getUTCDay() !== 1) d = nextDay_(d); start = utcToIso_(d); }
+  return { start: start, cycles: buildCalendar_(start, db.settings.cycles, db.settings.daysPerCycle, db.holidays), forTrainees: starts.length > 0 };
 }

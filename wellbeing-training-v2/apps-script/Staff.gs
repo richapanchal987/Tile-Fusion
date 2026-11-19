@@ -276,6 +276,17 @@ function setTaskActive(id, active) {
   });
 }
 
+/** R29: a Team Leader clears a content flag after checking the task. The note is kept in History. */
+function markContentChecked(taskId, note) {
+  return withLock_(() => {
+    const c = staffCtx_(['tl', 'coord']), old = c.db.rawTasks.find(x => x.id === String(taskId));
+    if (!old) throw new Error('That task was not found.');
+    const row = TASK_KEYS.map(k => k === 'actionNeeded' ? '' : (k === 'contentNotes' && !blank_(note) ? (old[k] ? old[k] + '\n' : '') + c.today + ' ' + str_(note, 300) : old[k]));
+    upsert_('Tasks', [0], [old.id], row); logChange_(c.me, 'Tasks', old.id, 'content checked', old.actionNeeded, str_(note, 200));
+    return getBootstrap();
+  });
+}
+
 /** Replaces one task's links. A link needs a web address unless it is a note. */
 function saveTaskLinks(taskId, links) {
   return withLock_(() => {

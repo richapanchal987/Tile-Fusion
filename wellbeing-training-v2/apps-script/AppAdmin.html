@@ -9,7 +9,7 @@ function vConfirm() {
     ${open ? `${field('Note (optional)', `<input type="text" id="pn-${esc(c.id)}">`)}<div class="row"><button class="btn small" data-act="confirmproc" data-a="${esc(c.id)}" data-ok="1">Process was followed</button><button class="btn danger small" data-act="confirmproc" data-a="${esc(c.id)}" data-ok="0">Process was not followed</button></div>`
       : `<p>${c.processConfirmed === 'Yes' ? chip('Process confirmed', 'good') : chip('Not confirmed', 'bad')} <span class="hint">${esc(c.processDate)} ${esc(c.processNote)}</span></p>`}</div>`;
   const cyc = Math.min(Math.max(UI.tab.rcycle || 1, 1), D.settings.cycles);
-  return `${pageBanner('Confirmations', 'Jointly assessed tasks: confirm the process was followed. You see the evidence, not scores or feedback.')}
+  return `${pageBanner('Confirmations', 'Jointly assessed tasks: confirm the process was followed. You see the evidence, not scores or feedback.')}${alertsCard()}
   ${todo.length ? todo.map(c => card(c, true)).join('') : `<div class="center">${emptyArt('reviews')}<h2>Nothing to confirm</h2><p class="muted">Rated joint tasks will appear here.</p></div>`}
   <div class="card"><h3>${ico('user')} Reliability input</h3><p class="hint">Attendance, punctuality and follow-through for a trainee in a cycle. The Team Leader reads this when rating professional behaviour.</p>
     <div class="formgrid">${field('Trainee', `<select id="rl-t">${opts(D.trainees.map(t => [t.email, t.name]), '')}</select>`)}${field('Cycle', `<input id="rl-c" type="number" min="1" max="${D.settings.cycles}" value="${cyc}">`)}</div>${field('Input', `<textarea id="rl-x" rows="2"></textarea>`)}<button class="btn small" data-act="reliab">Save input</button></div>
@@ -36,12 +36,34 @@ function vAdmin() {
   const ms = `<div class="card"><h3>${ico('flag')} Milestones</h3><div class="formgrid">${D.milestones.map(m => `<div class="inline-form">${field('Milestone ' + m.n + ' ends in cycle', `<input id="ms-d${m.n}" type="number" min="1" max="${S.cycles}" value="${m.deadline}">`, m.tasks + ' tasks, about ' + m.hoursPerDay + ' hours a day')}${field('Main focus', `<input id="ms-f${m.n}" type="text" value="${esc(m.focus)}">`)}</div>`).join('')}</div><button class="btn small" data-act="savems">Save milestones</button></div>`;
   const pol = `<div class="card"><h3>${ico('shield')} Policies</h3>${D.policies.map((p, i) => `<div class="formgrid">${field('Policy', `<input id="po-n${i}" type="text" value="${esc(p.name)}" disabled>`)}${field('Link', `<input id="po-l${i}" type="url" value="${esc(p.link)}">`)}${field('Last updated', `<input id="po-u${i}" type="date" value="${esc(p.updated)}">`, 'Changing this asks trainees to acknowledge again.')}<div><button class="btn small" data-act="savepol" data-i="${i}">Save</button></div></div>`).join('')}
     <div class="formgrid">${field('New policy name', `<input id="po-new" type="text">`)}<div><button class="btn ghost small" data-act="addpol">Add a policy</button></div></div></div>`;
-  const hol = `<div class="card"><h3>${ico('calendar')} School holidays</h3><p class="hint">One date per line (yyyy-mm-dd). Cycles skip these days and Sundays.</p><textarea id="ho-t" rows="5">${esc(D.holidays.join('\n'))}</textarea><button class="btn small" data-act="saveholidays">Save holidays</button></div>`;
-  const keys = ['cycles', 'daysPerCycle', 'passScore', 'supervisedEarliestCycle', 'strandAverageMin', 'keySkillOccasions', 'behaviourCycles', 'dueSoonDays', 'maxUploadMb', 'maxCases', 'maxGroups', 'maxCasesM4'];
+  const hol = holidayCard();
+  const keys = ['cycles', 'daysPerCycle', 'passScore', 'supervisedEarliestCycle', 'strandAverageMin', 'keySkillOccasions', 'behaviourCycles', 'dueSoonDays', 'maxUploadMb', 'maxCases', 'maxGroups', 'maxCasesM4', 'reviewWaitDays'];
   const set = `<details class="card"><summary>Settings</summary><div class="inline-form"><div class="formgrid">${keys.map(k => field(k, `<input id="st-${k}" type="number" step="any" value="${esc(S[k])}">`)).join('')}</div><button class="btn small" data-act="savesettings">Save settings</button></div></details>`;
-  return `${pageBanner('Administration', 'People, deadlines, policies and holidays.')}${imp}${lnk}${users}${ms}${pol}${hol}${set}`;
+  return `${pageBanner('Administration', 'People, deadlines, policies and holidays.')}${alertsCard()}${imp}${lnk}${users}${ms}${pol}${hol}${set}`;
+}
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function holidayCard() {
+  const cal = D.calendar, hol = UI.hol || (UI.hol = D.holidays.slice()), set = {}; hol.forEach(d => { set[d] = true; });
+  const dirty = JSON.stringify(hol.slice().sort()) !== JSON.stringify(D.holidays.slice().sort());
+  const first = cal.cycles[0] ? cal.cycles[0].start : D.today, last = cal.cycles.length ? cal.cycles[cal.cycles.length - 1].end : first;
+  const starts = {}; cal.cycles.forEach(c => { starts[c.start] = c.cycle; });
+  const months = []; let y = +first.slice(0, 4), m = +first.slice(5, 7) - 1;
+  while ((y < +last.slice(0, 4) || (y === +last.slice(0, 4) && m <= +last.slice(5, 7) - 1)) && months.length < 18) { months.push([y, m]); if (++m > 11) { m = 0; y++; } }
+  const pad = n => String(n).padStart(2, '0');
+  const grid = ([yy, mm]) => { const lead = (new Date(Date.UTC(yy, mm, 1)).getUTCDay() + 6) % 7, days = new Date(Date.UTC(yy, mm + 1, 0)).getUTCDate(); let cells = '';
+    for (let i = 0; i < lead; i++) cells += '<span></span>';
+    for (let d = 1; d <= days; d++) { const iso = yy + '-' + pad(mm + 1) + '-' + pad(d), sun = new Date(Date.UTC(yy, mm, d)).getUTCDay() === 0, h = set[iso];
+      cells += sun ? `<span class="cd sun" aria-hidden="true">${d}</span>` : `<button class="cd ${h ? 'hol' : ''}" data-act="holtoggle" data-d="${iso}" aria-pressed="${!!h}" aria-label="${d} ${MONTHS[mm]} ${yy}${h ? ', holiday' : ''}">${d}${starts[iso] ? `<i>C${starts[iso]}</i>` : ''}</button>`; }
+    return `<div class="cal"><h4>${MONTHS[mm]} ${yy}</h4><div class="cg"><b>M</b><b>T</b><b>W</b><b>T</b><b>F</b><b>S</b><b>S</b>${cells}</div></div>`; };
+  return `<div class="card"><h3>${ico('calendar')} School holidays</h3>
+    <p class="hint">Click a day to mark or clear a holiday. Sundays are always skipped. A cycle is ${D.settings.daysPerCycle} working days, so each holiday pushes the later cycles on by a day. Dates below are for ${cal.forTrainees ? 'the earliest active trainee (start ' + fmtDate(cal.start) + ')' : 'a start on ' + fmtDate(cal.start)}. Save to see the cycles move.</p>
+    <div class="cals">${months.map(grid).join('')}</div>
+    <div class="row"><button class="btn small" data-act="saveholidays" ${dirty ? '' : 'disabled'}>Save holidays (${hol.length})</button>${dirty ? '<button class="btn ghost small" data-act="holreset">Undo changes</button>' : ''}</div>
+    <details><summary>Cycle dates</summary><div class="tablewrap"><table><thead><tr><th>Cycle</th><th>Starts</th><th>Ends</th></tr></thead><tbody>${cal.cycles.map(c => `<tr><td>${c.cycle}</td><td>${esc(fmtDate(c.start))}</td><td>${esc(fmtDate(c.end))}</td></tr>`).join('')}</tbody></table></div></details></div>`;
 }
 Object.assign(ACTIONS, {
+  holtoggle: b => { const d = b.dataset.d, i = UI.hol.indexOf(d); if (i < 0) UI.hol.push(d); else UI.hol.splice(i, 1); const y = window.scrollY; render(); window.scrollTo(0, y); },
+  holreset: () => { UI.hol = null; render(); },
   confirmproc: b => run('confirmProcess', [b.dataset.a, b.dataset.ok === '1', val('pn-' + b.dataset.a)], 'Recorded'),
   reliab: () => run('saveReliability', [val('rl-t'), +val('rl-c'), val('rl-x')], 'Saved'),
   checkimport: async () => { try { busy = true; UI.importInfo = await call('importWorkbook', val('wb-id'), true, val('wb-replace') === true); } catch (e) { UI.importInfo = { error: true, counts: null, warnings: [] }; toast(e.message || String(e), true); } finally { busy = false; render(); } },
@@ -52,8 +74,8 @@ Object.assign(ACTIONS, {
   savems: () => run('saveMilestones', [[1, 2, 3, 4].map(n => ({ n: n, deadline: val('ms-d' + n), focus: val('ms-f' + n) }))], 'Milestones saved'),
   savepol: b => run('savePolicy', [val('po-n' + b.dataset.i), val('po-l' + b.dataset.i), val('po-u' + b.dataset.i)], 'Saved'),
   addpol: () => run('savePolicy', [val('po-new'), '', ''], 'Policy added'),
-  saveholidays: () => run('saveHolidays', [val('ho-t')], 'Holidays saved'),
-  savesettings: () => { const v = {}; ['cycles', 'daysPerCycle', 'passScore', 'supervisedEarliestCycle', 'strandAverageMin', 'keySkillOccasions', 'behaviourCycles', 'dueSoonDays', 'maxUploadMb', 'maxCases', 'maxGroups', 'maxCasesM4'].forEach(k => { v[k] = val('st-' + k); }); run('saveSettings', [v], 'Settings saved'); },
+  saveholidays: () => run('saveHolidays', [UI.hol.join('\n')], 'Holidays saved', () => { UI.hol = null; }),
+  savesettings: () => { const v = {}; ['cycles', 'daysPerCycle', 'passScore', 'supervisedEarliestCycle', 'strandAverageMin', 'keySkillOccasions', 'behaviourCycles', 'dueSoonDays', 'maxUploadMb', 'maxCases', 'maxGroups', 'maxCasesM4', 'reviewWaitDays'].forEach(k => { v[k] = val('st-' + k); }); run('saveSettings', [v], 'Settings saved'); },
   signoff: b => run('principalSignOff', [b.dataset.e], 'Signed off')
 });
 
@@ -67,7 +89,7 @@ function vHistory() {
 /* ---------------- Principal: clearance page ---------------- */
 function vClear() {
   const list = D.trainees;
-  return `${pageBanner('Clearance', 'Trainees in your section who are ready for, or have received, a clearance decision.')}
+  return `${pageBanner('Clearance', 'Trainees in your section who are ready for, or have received, a clearance decision.')}${alertsCard()}
   ${list.length ? list.map(t => { const cl = t.clearance, cleared = /^cleared/i.test(t.decision);
     return `<div class="card"><h3>${esc(t.name)} ${chip(READY_SHORT[t.caseReadiness], t.caseReadiness === 'Independent' ? 'good' : '')}</h3>
     <p>${meter('Tasks passed', t.progress.passed, t.progress.total)}</p>

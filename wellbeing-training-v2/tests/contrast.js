@@ -57,6 +57,7 @@ function auditInPage() {
     ['TL safety flags', TLS, async p => { await p.locator('.tab', { hasText: 'Safety flags' }).click(); }],
     ['Coordinator confirmations', COORD, async () => {}],
     ['TL task editor with links', TLS, async p => { await p.locator('.tab', { hasText: 'Task list' }).click(); await p.locator('.tablewrap tr', { hasText: 'SAFE-01' }).locator('[data-act=edittask]').click(); }],
+    ['TL task list with content flags', TLS, async p => { await p.locator('.tab', { hasText: 'Task list' }).click(); }],
     ['Coordinator admin', COORD, async p => { await p.locator('.tab', { hasText: 'Admin' }).click(); }],
     ['Coordinator history', COORD, async p => { await p.locator('.tab', { hasText: 'History' }).click(); await p.waitForSelector('td.num'); }],
     ['Principal clearance', PRS, async () => {}],

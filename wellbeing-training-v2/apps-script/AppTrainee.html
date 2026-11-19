@@ -15,6 +15,7 @@ function vHome() {
   const sup = tr.caseReadiness;
   return `${pageBanner(greeting() + ', ' + tr.name.split(' ')[0], c.cycle >= 1 && c.cycle <= D.settings.cycles ? 'You are in cycle ' + c.cycle + ' of ' + D.settings.cycles + '. Your readiness: ' + READY_SHORT[sup] + '.' : c.cycle < 1 ? 'Your training starts on ' + fmtDate(tr.start) + '.' : 'You have reached the end of the programme calendar.')}
   ${tiles([['check', p.passed, 'tasks passed of ' + p.total, ''], ['calendar', Math.max(c.cycle, 0), 'current cycle', ''], ['alert', c.overdue.length, 'overdue', c.overdue.length ? 'warn' : ''], ['clock', c.dueSoon.length, 'due soon', ''] ])}
+  ${alertsCard()}
   ${unseen.length ? `<section class="changes" aria-label="New feedback"><div class="hd"><h3>${ico('inbox')} New feedback</h3></div><ul>${unseen.map(a => `<li class="${a.flag ? 'bad' : a.reworkRequired ? 'warn' : 'good'}"><span class="badge">${ico(a.flag ? 'flag' : 'check', 14)}</span><span><b>${esc(a.task)} ${esc(taskTitle(a.task))}</b>: ${a.reworkRequired ? 'needs another attempt' : 'rated'}${a.score !== '' ? ', score ' + esc(a.score) : ''}. <button class="btn ghost small" data-act="open" data-t="${esc(a.task)}">Read</button></span></li>`).join('')}</ul></section>` : ''}
   <div class="cols"><div>
     <h2 class="sechead">Your milestones</h2>

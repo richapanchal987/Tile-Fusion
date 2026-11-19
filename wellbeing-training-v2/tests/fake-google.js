@@ -74,8 +74,8 @@ function makeWorld() {
   };
   const ctx = vm.createContext(sandbox);
   const dir = path.join(__dirname, '..', 'apps-script');
-  const src = ['Schema.gs', 'Dates.gs', 'Rules.gs', 'Data.gs', 'Import.gs', 'View.gs', 'Code.gs', 'Actions.gs', 'Staff.gs'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
-  const names = ['setup', 'getBootstrap', 'importWorkbook', 'importLinks', 'saveTaskLinks', 'saveDraft', 'uploadEvidence', 'removeEvidence', 'submitAttempt', 'getEvidenceFile', 'markSeen', 'acknowledgePolicy',
+  const src = ['Schema.gs', 'Dates.gs', 'Rules.gs', 'Data.gs', 'Import.gs', 'View.gs', 'Alerts.gs', 'Code.gs', 'Actions.gs', 'Staff.gs'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
+  const names = ['setup', 'getBootstrap', 'importWorkbook', 'importLinks', 'saveTaskLinks', 'markContentChecked', 'saveDraft', 'uploadEvidence', 'removeEvidence', 'submitAttempt', 'getEvidenceFile', 'markSeen', 'acknowledgePolicy',
     'savePlannedDate', 'saveSelfRating', 'rateAttempt', 'recordObserved', 'releaseRating', 'confirmProcess', 'setEntryCheck', 'setDueOverride', 'enrolTrainee', 'updateTrainee',
     'confirmSupervised', 'recordClearance', 'principalSignOff', 'logSupervision', 'removeSupervision', 'saveBehaviour', 'saveReliability', 'saveTask', 'setTaskActive', 'saveUser', 'saveMilestones', 'savePolicy',
     'saveHolidays', 'saveSettings', 'exportCatalogue', 'exportTraineeRecord', 'getHistory'];

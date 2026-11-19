@@ -17,7 +17,7 @@ const tab = (p, t) => p.locator('.tab', { hasText: t }).click();
     assert.strictEqual(await p.locator('.tab').count(), 5);
     const txt = await p.locator('main').innerText();
     assert.ok(/New feedback/.test(txt) && /SAFE-02/.test(txt), 'released feedback shown');
-    assert.ok(!/STU-01/.test(await p.locator('.changes').innerText()), 'unreleased rating is not announced');
+    assert.ok(!/STU-01/.test(await p.locator('section[aria-label="New feedback"]').innerText()), 'unreleased rating is not announced');
     await shot(p, '1-trainee-home'); assert.deepStrictEqual(p.errors, []); await p.context().close();
   });
 
@@ -92,6 +92,18 @@ const tab = (p, t) => p.locator('.tab', { hasText: t }).click();
     assert.ok(await q.locator('main').innerText().then(x => /Links/.test(x))); assert.ok(await q.locator('[data-linkrow]').count() === 3);
     await q.click('[data-act=addlink]'); assert.strictEqual(await q.locator('[data-linkrow]').count(), 4);
     assert.deepStrictEqual(q.errors, []); await q.context().close();
+  });
+
+  await step('alerts, content checks and the holiday calendar', async () => {
+    const p = await open(browser, ASHA); assert.ok(await p.locator('section[aria-label="Needs attention"]').innerText().then(t => /polic/i.test(t))); await p.context().close();
+    const q = await open(browser, TLS); assert.ok(await q.locator('section[aria-label="Needs attention"]').count() === 1);
+    await tab(q, 'Task list'); assert.ok(await q.locator('main').innerText().then(t => /need a content check/.test(t) && /Needs school input/.test(t))); await shot(q, '10-content-flags');
+    await q.locator('[data-act=checked]').first().scrollIntoViewIfNeeded(); assert.deepStrictEqual(q.errors, []); await q.context().close();
+    const c = await open(browser, COORD); await tab(c, 'Admin'); await c.locator('.cals').scrollIntoViewIfNeeded();
+    const days = await c.locator('button.cd').count(); assert.ok(days > 60);
+    const first = c.locator('button.cd[data-d="2026-11-05"]'); await first.click(); assert.strictEqual(await c.locator('button.cd.hol').count(), 1);
+    await shot(c, '11-holiday-calendar'); await c.click('[data-act=saveholidays]'); await c.waitForSelector('.toast.show:not(.err)');
+    W.as(COORD); assert.ok(W.call('getBootstrap', []).holidays.includes('2026-11-05')); assert.deepStrictEqual(c.errors, []); await c.context().close();
   });
 
   await step('Coordinator: confirmations, administration and history', async () => {

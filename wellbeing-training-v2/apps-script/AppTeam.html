@@ -40,6 +40,7 @@ function vTeam() {
   const pend = kind() === 'tl' ? pendingReviews().length : 0;
   return `${pageBanner(kind() === 'tl' ? 'Your team' : 'Trainees', kind() === 'tl' ? 'Your own section in full. The other section is there for cover, read-only.' : 'Who is in the programme.')}
   ${kind() === 'tl' ? tiles([['users', ownTrainees().length, 'trainees in your section', ''], ['inbox', pend, 'waiting for you', pend ? 'warn' : ''], ['alert', ownTrainees().reduce((a, t) => a + t.calc.overdue.length, 0), 'overdue tasks', ''], ['star', ownTrainees().filter(t => t.calc.clearance.eligible).length, 'eligible for clearance', '']]) : ''}
+  ${alertsCard()}
   <div class="tablewrap"><table class="team"><thead><tr><th>Trainee</th><th>Section</th><th>Cycle</th><th>Tasks passed</th><th>Overdue</th><th>Reviews</th><th>Readiness</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="muted">No trainees yet.</td></tr>'}</tbody></table></div>
   ${enrolForm()}`;
 }
@@ -162,6 +163,7 @@ function vCatalogue() {
   const q = UI.q.toLowerCase(), list = D.catalogue.filter(t => !q || (t.id + ' ' + t.title).toLowerCase().indexOf(q) > -1);
   if (UI.edit !== null) return taskEditor();
   return `${pageBanner('Task list', 'The master copy of every task. Edit here; changes are logged. Retire a task instead of deleting it.')}
+  ${(D.contentFlags || []).length ? `<details class="card" ${UI.q ? '' : 'open'}><summary><b>${D.contentFlags.length} task${D.contentFlags.length === 1 ? '' : 's'} need a content check</b></summary><div class="tablewrap"><table><thead><tr><th>Task</th><th>Why</th><th>Checked</th></tr></thead><tbody>${D.contentFlags.map(f => `<tr><td><b>${esc(f.id)}</b> ${esc(f.title)}<br><span class="hint">${esc(f.status)}</span></td><td>${f.reasons.map(r => `<div>${esc(r)}</div>`).join('')}</td><td><input type="text" id="cc-${esc(f.id)}" placeholder="What you checked (optional)" aria-label="Note for ${esc(f.id)}"> <button class="btn small" data-act="edittask" data-t="${esc(f.id)}">Edit</button> <button class="btn ghost small" data-act="checked" data-t="${esc(f.id)}">Mark as checked</button></td></tr>`).join('')}</tbody></table></div><p class="hint">Marking as checked clears "Action needed" and keeps your note in the task’s content notes. A task that is still "Needs school input" stays flagged until its status is changed.</p></details>` : ''}
   <div class="panel"><div class="formgrid">${field('Search', `<input id="q" type="search" value="${esc(UI.q)}" data-change="search" placeholder="Task ID or title">`)}<div class="row"><button class="btn small" data-act="newtask">Add a task</button><button class="btn ghost small" data-act="exportcat">Download as CSV</button></div></div></div>
   <div class="tablewrap"><table><thead><tr><th>ID</th><th>Task</th><th>Milestone</th><th>Strand</th><th>Rating</th><th>Content</th><th>Active</th><th></th></tr></thead><tbody>${list.map(t => `<tr><td>${esc(t.id)}</td><td>${esc(t.title)}</td><td>${esc(t.milestone)}</td><td>${esc(t.strand)}</td><td>${esc(t.ratingMethod)} ${esc(t.passMark)}</td><td>${esc(t.contentStatus)}</td><td>${t.active === 'Yes' ? 'Yes' : chip('Retired')}</td><td><button class="btn small" data-act="edittask" data-t="${esc(t.id)}">Edit</button> <button class="btn ghost small" data-act="retire" data-t="${esc(t.id)}" data-r="${t.active === 'Yes' ? 0 : 1}">${t.active === 'Yes' ? 'Retire' : 'Restore'}</button></td></tr>`).join('')}</tbody></table></div>`;
 }
@@ -196,6 +198,7 @@ Object.assign(ACTIONS, {
   edittask: b => { UI.edit = b.dataset.t; render(); window.scrollTo(0, 0); },
   canceledit: () => { UI.edit = null; render(); },
   savetask: () => { const f = {}; D.config.taskFields.forEach(x => { if (x.kind !== 'calc') { const e = document.getElementById('tf-' + x.key); if (e && !e.disabled) f[x.key] = e.value; } }); const id = UI.edit === '' ? f.id : UI.edit; f.id = id; run('saveTask', [{ id: id, fields: f }], 'Task saved', () => { UI.edit = null; }); },
+  checked: b => run('markContentChecked', [b.dataset.t, val('cc-' + b.dataset.t)], 'Marked as checked'),
   retire: b => run('setTaskActive', [b.dataset.t, b.dataset.r === '1'], b.dataset.r === '1' ? 'Task restored' : 'Task retired'),
   exportcat: async () => { try { busy = true; const r = await call('exportCatalogue'); download(r.name, r.text); } catch (e) { toast(e.message, true); } finally { busy = false; } }
 });

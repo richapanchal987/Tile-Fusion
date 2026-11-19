@@ -215,4 +215,32 @@ t('task links: imported from the Links tab (hyperlinks and chips), shown to trai
   throws(() => call(TR, 'saveTaskLinks', 'SAFE-02', []), /do not have access/);
 });
 
+t('alerts: each person gets only their own; review waits use working days; content flags reach Team Leaders only (R22-R25, R29)', () => {
+  call(TR2, 'submitAttempt', 'SAFE-01', { evidence: 'https://x', anon: true, hours: 1 });
+  assert.ok(!call(TLJ, 'getBootstrap').alerts.some(a => /has waited/.test(a.text)), 'not yet overdue for review');
+  W.setNow('2026-11-12');
+  const tlj = call(TLJ, 'getBootstrap').alerts, tls = call(TLS, 'getBootstrap').alerts;
+  assert.ok(tlj.some(a => /has waited \d+ working days/.test(a.text) && a.go.view === 'reviews'));
+  assert.ok(!tls.some(a => /Trainee Two/.test(a.text)), 'the other section’s alerts stay out');
+  const mine = call(TR2, 'getBootstrap').alerts; assert.ok(mine.some(a => /polic/.test(a.text))); assert.ok(!JSON.stringify(mine).includes('Trainee One'));
+  assert.ok(call(COORD, 'getBootstrap').alerts.every(a => !/Trainee/.test(a.text) || /Confirm the process/.test(a.text)));
+  assert.ok(call(PRS, 'getBootstrap').alerts.length === 0);
+  W.setNow('2026-11-03');
+  const cf = call(TLS, 'getBootstrap').contentFlags; assert.ok(cf.some(f => f.id === 'SYS-05' && /school input/.test(f.reasons[0])));
+  assert.ok(!('contentFlags' in call(TR, 'getBootstrap')) && !JSON.stringify(call(TR, 'getBootstrap')).includes('Needs school input'));
+  call(TLS, 'saveTask', { id: 'SAFE-01', actionNeeded: 'Check the policy link' });
+  assert.ok(call(TLS, 'getBootstrap').contentFlags.some(f => f.id === 'SAFE-01'));
+  call(TLS, 'markContentChecked', 'SAFE-01', 'Checked against Policy 2026');
+  assert.ok(!call(TLS, 'getBootstrap').contentFlags.some(f => f.id === 'SAFE-01'));
+  throws(() => call(TR, 'markContentChecked', 'SAFE-01', ''), /do not have access/);
+});
+
+t('the reference calendar follows holidays (R8)', () => {
+  const before = call(COORD, 'getBootstrap').calendar;
+  call(COORD, 'saveHolidays', '2026-11-04');
+  const after = call(COORD, 'getBootstrap').calendar;
+  assert.strictEqual(after.start, before.start); assert.notStrictEqual(after.cycles[0].end, before.cycles[0].end);
+  call(COORD, 'saveHolidays', '');
+});
+
 console.log(n + ' server tests passed');

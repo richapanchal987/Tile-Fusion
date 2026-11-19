@@ -31,6 +31,12 @@ function linksHtml(links) {
   if (!links || !links.length) return '';
   return LINK_ORDER.filter(t => links.some(l => l.type === t)).map(t => `<h4>${LINK_LABEL[t]}</h4><ul class="tasklist">${links.filter(l => l.type === t).map(l => `<li>${l.url ? link(l.url, l.name) : esc(l.name)}${t === 'Team Leader key' ? ' ' + chip('Team Leaders only', 'warn') : ''}</li>`).join('')}</ul>`).join('');
 }
+function alertsCard() {
+  const a = D.alerts || [];
+  if (!a.length) return '';
+  const ic = { bad: 'alert', warn: 'clock', info: 'spark' };
+  return `<section class="changes" aria-label="Needs attention"><div class="hd"><h3>${ico('alert')} Needs attention (${a.length})</h3></div><ul>${a.slice(0, 8).map((x, i) => `<li class="${x.level === 'bad' ? 'bad' : x.level === 'warn' ? 'warn' : 'good'}"><span class="badge">${ico(ic[x.level], 14)}</span><span>${esc(x.text)}${x.go ? ` <button class="btn ghost small" data-act="go" data-i="${i}">Open</button>` : ''}</span></li>`).join('')}</ul>${a.length > 8 ? `<p class="hint">and ${a.length - 8} more</p>` : ''}</section>`;
+}
 const kind = () => D && D.me ? D.me.kind : 'none';
 const taskTitle = id => { const t = (D.tasks || D.catalogue || []).find(x => x.id === id); return t ? t.title : id; };
 
@@ -99,6 +105,7 @@ const ACTIONS = {
   view: b => { UI.view = b.dataset.v; UI.task = null; render(); window.scrollTo(0, 0); },
   open: b => { UI.task = b.dataset.t; UI.view = 'task'; render(); window.scrollTo(0, 0); },
   back: () => { UI.view = 'tasks'; UI.task = null; render(); },
+  go: b => { const g = (D.alerts || [])[+b.dataset.i].go; if (!g) return; UI.view = g.view; if (g.trainee) UI.tid = g.trainee; if (g.task) UI.task = g.task; if (g.attempt) UI.att = g.attempt; render(); window.scrollTo(0, 0); },
   filter: b => { UI.filter = b.value; render(); },
   msfilter: b => { UI.ms = +b.value; render(); },
   search: b => { UI.q = b.value; const pos = b.selectionStart; render(); const i = $('#q'); if (i) { i.focus(); i.setSelectionRange(pos, pos); } },

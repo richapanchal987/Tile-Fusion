@@ -23,7 +23,7 @@ It is a Google Apps Script web app. The Google Sheet is the database, a private 
 
 **Links (done):** the Links tab of the training workbook (task sheets, tool cards, references, Nucleus forms, Team Leader keys) is imported once from Admin and edited per task afterwards. Trainees see only "Trainee" links on tasks that are open, and only their own section's Nucleus form; Team Leader keys reach Team Leaders only.
 
-**Not yet built (Step 3):** email alerts, content review flags, holiday calendar beyond the date list.
+**Step 3 (done, in the app only, no emails):** "Needs attention" lists for every role (a Team Leader is nudged after 3 working days waiting; the number is a setting), content review flags on the task list for Team Leaders, and a click-to-mark holiday calendar that shows the cycle dates.
 
 ## Deploy (new Apps Script project, copy of the Sheet)
 
@@ -38,7 +38,7 @@ It is a Google Apps Script web app. The Google Sheet is the database, a private 
 
 ```
 node tests/rules.test.js      # the rules (21)
-node tests/server.test.js     # the server, roles and privacy (16)
+node tests/server.test.js     # the server, roles and privacy (18)
 NODE_PATH=$(npm root -g) node tests/e2e.js        # real pages in Chromium (11)
 NODE_PATH=$(npm root -g) node tests/contrast.js   # WCAG AA text contrast, light and dark
 ```

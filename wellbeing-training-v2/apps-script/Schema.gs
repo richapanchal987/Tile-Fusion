@@ -116,6 +116,7 @@ const SETTING_DEFS = {
   keySkillOccasions: [2, 'Occasions rated 3 or above needed for each Key Skill'],
   keySkillRealUpTo: [5, 'Key Skills up to this number need at least one Real occasion'],
   behaviourCycles: [2, 'Professional behaviour must be 3 or above in this many most recent released cycles'],
+  reviewWaitDays: [3, 'A Team Leader is nudged when work has waited for a rating or release this many working days'],
   dueSoonDays: [3, 'A task is due soon within this many working days'],
   maxUploadMb: [10, 'Largest evidence file in MB'],
   maxCases: [3, 'Supervised cases allowed before Milestone 4'],
