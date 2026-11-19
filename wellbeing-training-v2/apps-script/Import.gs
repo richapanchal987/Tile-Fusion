@@ -81,3 +81,31 @@ function validateCatalogue_(raw, keySkills) {
   active.forEach(o => visit(o.id, []));
   return w.filter(Boolean);
 }
+
+/**
+ * The Links tab of the training workbook: one row per link for a task (task sheet, tool card, reference, Team Leader key...).
+ * rows = [[{text, url}, ...], ...], the first row being the headings. A link may be a plain hyperlink or a Drive "smart chip".
+ * Pure, so it is tested without Google.
+ */
+function buildLinksImport_(rows, taskIds) {
+  const head = (rows[0] || []).map(c => String((c && c.text) || '').trim()), ix = n => head.indexOf(n), w = [];
+  const need = ['Task ID', 'Link Type', 'Link Name', 'Who Can See It', 'Link'];
+  need.forEach(n => { if (ix(n) < 0) w.push("The Links tab has no column called '" + n + "'."); });
+  if (w.length) return { links: [], warnings: w, counts: { links: 0, tasks: 0 } };
+  const cell = (r, n) => r[ix(n)] || { text: '', url: '' }, seen = {}, out = [], tasks = {};
+  rows.slice(1).forEach((r, i) => {
+    const id = String(cell(r, 'Task ID').text).trim(); if (!id) return;
+    const type = String(cell(r, 'Link Type').text).trim(), name = String(cell(r, 'Link Name').text).trim(), lk = cell(r, 'Link'), url = String(lk.url || '').trim();
+    const where = 'Row ' + (i + 2) + ' (' + id + ', ' + (name || type) + ')';
+    const isNote = /^note/i.test(type);
+    if (LINK_TYPES.indexOf(type) < 0) w.push(where + ' has an unknown link type: ' + type + '.');
+    if (!isNote && !url) w.push(where + ' has no link in it, so it is skipped.');
+    else if (url && !/^https?:\/\//i.test(url)) w.push(where + ' has a link that is not a web address, so it is skipped.');
+    if (!isNote && !/^https?:\/\//i.test(url)) return;
+    const key = [id, type, name, url].join('|'); if (seen[key]) { w.push(where + ' is a repeat and is skipped.'); return; } seen[key] = true;
+    if (taskIds && taskIds.indexOf(id) < 0) w.push(where + ': ' + id + ' is not in the task list, so it will never show.');
+    tasks[id] = true;
+    out.push([id, LINK_TYPES.indexOf(type) < 0 ? 'Reference / resource' : type, name, /team leader/i.test(cell(r, 'Who Can See It').text) ? 'Team Leader only' : 'Trainee', String(lk.text || '').trim(), isNote ? '' : url]);
+  });
+  return { links: out, warnings: w, counts: { links: out.length, tasks: Object.keys(tasks).length, teamLeaderOnly: out.filter(x => x[3] === 'Team Leader only').length } };
+}

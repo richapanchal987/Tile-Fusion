@@ -69,12 +69,13 @@ function makeWorld() {
       newBlob: blob
     },
     DriveApp: { createFolder: n => folder(n), getFolderById: i => { if (!state.folders[i]) throw new Error('no folder'); return state.folders[i]; }, getFileById: i => { if (!state.files[i]) throw new Error('no file'); return state.files[i]; } },
+    Sheets: { Spreadsheets: { get: (id) => { const g = state.linkGrids && state.linkGrids[id]; if (!g) throw new Error('No access'); return { sheets: [{ data: [{ rowData: g.map(r => ({ values: r.map(c => { const v = { formattedValue: c.text }; if (c.url) { if (c.chip) v.chipRuns = [{ chip: { richLinkProperties: { uri: c.url } } }]; else v.hyperlink = c.url; } return v; }) })) }] }] }; } } },
     HtmlService: {}
   };
   const ctx = vm.createContext(sandbox);
   const dir = path.join(__dirname, '..', 'apps-script');
   const src = ['Schema.gs', 'Dates.gs', 'Rules.gs', 'Data.gs', 'Import.gs', 'View.gs', 'Code.gs', 'Actions.gs', 'Staff.gs'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
-  const names = ['setup', 'getBootstrap', 'importWorkbook', 'saveDraft', 'uploadEvidence', 'removeEvidence', 'submitAttempt', 'getEvidenceFile', 'markSeen', 'acknowledgePolicy',
+  const names = ['setup', 'getBootstrap', 'importWorkbook', 'importLinks', 'saveTaskLinks', 'saveDraft', 'uploadEvidence', 'removeEvidence', 'submitAttempt', 'getEvidenceFile', 'markSeen', 'acknowledgePolicy',
     'savePlannedDate', 'saveSelfRating', 'rateAttempt', 'recordObserved', 'releaseRating', 'confirmProcess', 'setEntryCheck', 'setDueOverride', 'enrolTrainee', 'updateTrainee',
     'confirmSupervised', 'recordClearance', 'principalSignOff', 'logSupervision', 'removeSupervision', 'saveBehaviour', 'saveReliability', 'saveTask', 'setTaskActive', 'saveUser', 'saveMilestones', 'savePolicy',
     'saveHolidays', 'saveSettings', 'exportCatalogue', 'exportTraineeRecord', 'getHistory'];

@@ -184,4 +184,35 @@ t('supervision log: needs Supervised Practice, anonymous code, and respects case
   call(TLS, 'removeSupervision', id); assert.strictEqual(call(TR, 'getBootstrap').limits.cases + call(TR, 'getBootstrap').limits.groups, 3);
 });
 
+t('task links: imported from the Links tab (hyperlinks and chips), shown to trainees by visibility, section and lock (R3, R4)', () => {
+  const c = (text, url, chip) => ({ text: text, url: url || '', chip: !!chip });
+  const row = (id, type, name, see, title, url, chip) => [c(id), c('Title'), c(type), c(name), c(see), c(title, url, chip)];
+  const head = ['Task ID', 'Task / Activity', 'Link Type', 'Link Name', 'Who Can See It', 'Link'].map(x => c(x));
+  W.state.linkGrids = { lk: [head,
+    row('SAFE-01', 'Task sheet', 'SAFE-01 task sheet', 'Trainee', 'doc title', 'https://docs.google.com/document/d/AAA/edit', true),
+    row('SAFE-01', 'Team Leader key', 'SAFE-01 key', 'Team Leader only', 'key', 'https://docs.google.com/document/d/KEY/edit', true),
+    row('SAFE-01', 'Nucleus form', 'Junior School form', 'Trainee', 'f', 'https://nucleus.example/JuniorSchoolForm'),
+    row('SAFE-01', 'Nucleus form', 'Senior School form', 'Trainee', 'f', 'https://nucleus.example/SeniorSchoolForm'),
+    row('SAFE-01', 'Note (no link needed)', 'Shown in person by your Team Leader', 'Trainee', 'n', ''),
+    row('STU-22', 'Task sheet', 'STU-22 sheet', 'Trainee', 't', 'https://docs.google.com/document/d/LOCKED/edit', true),
+    row('SAFE-02', 'Tool card', 'Tool without a link', 'Trainee', 't', ''),
+    row('NOPE-9', 'Task sheet', 'Orphan', 'Trainee', 't', 'https://docs.google.com/document/d/ORPHAN/edit', true),
+    row('SAFE-01', 'Task sheet', 'Bad', 'Trainee', 't', 'javascript:alert(1)')] };
+  throws(() => call(TR, 'importLinks', 'lk', true), /do not have access/);
+  const dry = call(COORD, 'importLinks', 'lk', true);
+  assert.strictEqual(dry.counts.links, 7); assert.strictEqual(dry.counts.teamLeaderOnly, 1);
+  assert.ok(dry.warnings.some(w => /no link in it/.test(w)) && dry.warnings.some(w => /not in the task list/.test(w)) && dry.warnings.some(w => /not a web address/.test(w)));
+  call(COORD, 'importLinks', 'lk', false);
+  const b = call(TR, 'getBootstrap'), s1 = b.tasks.find(x => x.id === 'SAFE-01'), json = JSON.stringify(b);
+  assert.ok(s1.links.some(l => l.url.includes('/AAA/'))); assert.ok(!json.includes('/KEY/'), 'Team Leader key never reaches a trainee');
+  assert.ok(s1.links.some(l => l.name.includes('Senior')) && !s1.links.some(l => l.name.includes('Junior')), 'only the trainee’s own section form');
+  assert.ok(s1.links.some(l => !l.url && /in person/.test(l.name)));
+  assert.ok(!json.includes('/LOCKED/') && !b.tasks.find(x => x.id === 'STU-22').links, 'locked task shows no links');
+  const tl = call(TLS, 'getBootstrap'); assert.ok(JSON.stringify(tl.links).includes('/KEY/'));
+  call(TLS, 'saveTaskLinks', 'SAFE-02', [{ type: 'Task sheet', name: 'Edited sheet', see: 'Trainee', url: 'https://example.org/x' }]);
+  assert.ok(call(TR, 'getBootstrap').tasks.find(x => x.id === 'SAFE-02').links.some(l => l.name === 'Edited sheet'));
+  throws(() => call(TLS, 'saveTaskLinks', 'SAFE-02', [{ type: 'Task sheet', name: 'x', url: 'ftp://x' }]), /https/);
+  throws(() => call(TR, 'saveTaskLinks', 'SAFE-02', []), /do not have access/);
+});
+
 console.log(n + ' server tests passed');

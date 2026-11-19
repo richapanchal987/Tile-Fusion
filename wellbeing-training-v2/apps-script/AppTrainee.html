@@ -68,6 +68,8 @@ function vTask() {
   if (t.status === 'locked') return top + `<div class="card"><h3>${ico('lock')} This task is locked</h3>${t.reasons.map(r => `<p>${lockReason(r)}</p>`).join('')}</div>`;
   if (t.status === 'soon') return top + `<div class="card"><h3>${ico('clock')} Coming soon</h3><p>This task is not ready yet. The Team Leaders are finishing the content, so you cannot start it for now.</p></div>`;
   const links = (t.refLinks || '').split(/[\n,; ]+/).filter(isUrl);
+  const sheet = (t.links || []).filter(l => l.type === 'Task sheet' && l.url);
+  const mats = (t.links || []).length ? `<div class="card"><h3>${ico('inbox')} Your materials</h3>${sheet.length ? `<p>${sheet.map(l => `<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">Open the task sheet</a>`).join(' ')}</p>` : ''}${linksHtml(t.links.filter(l => l.type !== 'Task sheet'))}</div>` : '';
   const learn = `<div class="card"><h3>${ico('book')} Learn</h3>${t.inApp ? para(t.inApp) : ''}${t.learn ? para(t.learn) : ''}${!t.inApp && !t.learn ? '<p class="muted">Use the links below.</p>' : ''}
     ${t.traineeLink ? `<p>${link(t.traineeLink, 'Open the learning content')}</p>` : ''}${t.refs ? `<h4>References</h4>${para(t.refs)}` : ''}${links.length ? `<ul class="tasklist">${links.map(u => `<li>${link(u)}</li>`).join('')}</ul>` : ''}
     ${t.toolkit ? `<p class="hint">Toolkit: ${esc(t.toolkit)}</p>` : ''}</div>`;
@@ -93,7 +95,7 @@ function vTask() {
     <label class="row"><input type="checkbox" ${df(k + 'anon')} ${dv(k + 'anon', false) ? 'checked' : ''}> <span>I confirm that this evidence is anonymised and contains no student information.</span></label>
     <div class="row"><button class="btn" data-act="submit" data-t="${esc(t.id)}">Submit for review</button><button class="btn ghost" data-act="savedraft" data-t="${esc(t.id)}">Save draft</button></div></div>`;
   }
-  return top + `<div class="cols"><div>${doIt}${submit}</div><aside>${learn}${done.length ? `<h3 class="sechead">Your attempts</h3>${done.map(attemptCard).join('')}` : ''}</aside></div>`;
+  return top + `<div class="cols"><div>${mats}${doIt}${submit}</div><aside>${learn}${done.length ? `<h3 class="sechead">Your attempts</h3>${done.map(attemptCard).join('')}` : ''}</aside></div>`;
 }
 
 const draftFields = id => ({ evidence: val0(id + ':ev'), hours: val0(id + ':hrs'), reflection: val0(id + ':ref'), question: val0(id + ':q'), anon: !!UI.draft[id + ':anon'] });

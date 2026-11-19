@@ -146,3 +146,25 @@ function importWorkbook(workbookId, dryRun, replace) {
   });
 }
 function setSetting_(key, value) { upsert_('Settings', [0], [key], [key, value, (SETTING_DEFS[key] || ['', ''])[1]]); }
+
+/** Reads the Links tab, including smart chips, with the Sheets advanced service (enabled in appsscript.json). */
+function readLinksGrid_(id, tab) {
+  const res = Sheets.Spreadsheets.get(id, { ranges: [(tab || 'Links') + '!A1:K1500'], fields: 'sheets.data.rowData.values(formattedValue,hyperlink,chipRuns)' });
+  const data = (((res.sheets || [])[0] || {}).data || [])[0] || {};
+  return (data.rowData || []).map(r => (r.values || []).map(v => ({ text: v.formattedValue || '', url: v.hyperlink || ((v.chipRuns || []).map(c => c.chip && c.chip.richLinkProperties && c.chip.richLinkProperties.uri).filter(Boolean)[0]) || '' })));
+}
+const sheetIdOf_ = v => str_(v, 300).replace(/^.*\/d\//, '').replace(/[\/?#].*$/, '');
+
+/** Brings in the Links tab (once the task list is in). Check first with dryRun, then import. It replaces the app's links. */
+function importLinks(workbookId, dryRun) {
+  return withLock_(() => {
+    const c = staffCtx_(['coord', 'tl']), id = sheetIdOf_(workbookId);
+    if (!id) throw new Error('Paste the workbook’s link or ID.');
+    let grid; try { grid = readLinksGrid_(id); } catch (e) { throw new Error('Could not read the Links tab. Share the workbook with the account that runs this app and check the tab is called Links.'); }
+    const imp = buildLinksImport_(grid, c.db.tasks.map(t => t.id));
+    if (dryRun) return { counts: imp.counts, warnings: imp.warnings };
+    if (!imp.links.length) throw new Error('Nothing to import. ' + (imp.warnings[0] || ''));
+    replaceRows_('Links', imp.links); logChange_(c.me, 'Links', 'all', 'import', '', imp.counts.links + ' links');
+    return { counts: imp.counts, warnings: imp.warnings, bootstrap: getBootstrap() };
+  });
+}

@@ -21,6 +21,8 @@ It is a Google Apps Script web app. The Google Sheet is the database, a private 
 
 **Step 2 (done):** Key Skills tracker for trainees and Team Leaders, supervised practice log with anonymous case codes and caseload limits (3 cases and 1 group before Milestone 4, 5 cases in Milestone 4), clearance checklist.
 
+**Links (done):** the Links tab of the training workbook (task sheets, tool cards, references, Nucleus forms, Team Leader keys) is imported once from Admin and edited per task afterwards. Trainees see only "Trainee" links on tasks that are open, and only their own section's Nucleus form; Team Leader keys reach Team Leaders only.
+
 **Not yet built (Step 3):** email alerts, content review flags, holiday calendar beyond the date list.
 
 ## Deploy (new Apps Script project, copy of the Sheet)
@@ -29,15 +31,15 @@ It is a Google Apps Script web app. The Google Sheet is the database, a private 
 2. Add these files (names exactly as shown): `Schema.gs, Dates.gs, Rules.gs, Data.gs, Import.gs, View.gs, Code.gs, Actions.gs, Staff.gs` and the HTML files `Index, Styles, Art, AppCore, AppTrainee, AppTeam, AppAdmin`. Replace `appsscript.json` with the one here. (Using `clasp push` from `apps-script/` avoids copy-paste mistakes.)
 3. Run `setup()` once (run it again after an update: it adds any new tab and never overwrites data) and accept the permissions. It creates every tab, the evidence folder, default policies and makes `richa.panchal@fsksurat.in` the Coordinator.
 4. Deploy > New deployment > Web app, execute as you, access: anyone in fsksurat.in.
-5. Open the app as the Coordinator: Admin > Task list import. Share the workbook with the account that runs the app, paste its link, press "Check the workbook", read the notes, then "Import". Add staff and holidays on the same page.
+5. Open the app as the Coordinator: Admin > Task list import. Share the workbook with the account that runs the app, paste its link, press "Check the workbook", read the notes, then "Import". Then use "Task links import" on the same page with the training workbook's link. Add staff and holidays too.
 6. Team Leaders enrol trainees on the Team page.
 
 ## Checks
 
 ```
 node tests/rules.test.js      # the rules (21)
-node tests/server.test.js     # the server, roles and privacy (15)
-NODE_PATH=$(npm root -g) node tests/e2e.js        # real pages in Chromium (10)
+node tests/server.test.js     # the server, roles and privacy (16)
+NODE_PATH=$(npm root -g) node tests/e2e.js        # real pages in Chromium (11)
 NODE_PATH=$(npm root -g) node tests/contrast.js   # WCAG AA text contrast, light and dark
 ```
 Tests use `tests/fixture.js`, a made-up workbook. The real workbook is never committed because it holds Team Leader-only answer keys.

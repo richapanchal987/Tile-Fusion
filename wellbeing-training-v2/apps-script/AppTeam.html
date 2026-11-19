@@ -45,6 +45,7 @@ function vTeam() {
 }
 
 /* ---------------- Reviews and the rating form ---------------- */
+const taskLinks = id => linksHtml((D.links || []).filter(l => l.task === id));
 function attemptEvidence(a) {
   return `${a.evidence ? `<p>Evidence: ${link(a.evidence)}</p>` : ''}${filesHtml(a.files, a.id, false)}${a.reflection ? `<details open><summary>Reflection</summary>${para(a.reflection)}</details>` : ''}${a.question ? `<div class="note"><b>Question:</b> ${esc(a.question)}</div>` : ''}${a.hours != null ? `<p class="hint">Hours spent: ${esc(a.hours)}</p>` : ''}${a.anon ? '<p class="hint">Trainee confirmed the evidence is anonymised.</p>' : ''}`;
 }
@@ -79,6 +80,7 @@ function vReviews() {
   return `${pageBanner('Reviews', 'Work waiting for you to rate, and ratings you have not released yet.')}
   ${!q.length ? `<div class="center">${emptyArt('reviews')}<h2>All caught up</h2><p class="muted">Nothing is waiting.</p></div>` : `<div class="cols"><div>
     <div class="card"><h3>${esc(sel.tr.record.name)} · ${esc(sel.a.task)} ${esc(taskTitle(sel.a.task))}</h3><p class="hint">Attempt ${sel.a.no}${sel.a.version ? ', Version ' + esc(sel.a.version) : ''}${sel.a.source === 'Observed' ? ', observed' : ''}</p>${attemptEvidence(sel.a)}</div>
+    ${taskLinks(sel.a.task) ? `<div class="card"><h3>${ico('shield')} Links for this task</h3>${taskLinks(sel.a.task)}</div>` : ''}
     <div class="card"><h3>${ico('reviews')} Your rating</h3>${ratingForm(sel.tr, sel.a)}</div></div><aside><div class="card"><h3>Queue (${q.length})</h3>${left}</div></aside></div>`}`;
 }
 Object.assign(ACTIONS, {
@@ -172,9 +174,24 @@ function taskEditor() {
     return `<input id="${id}" type="text" value="${v}" ${f.key === 'id' && UI.edit !== '' ? 'disabled' : ''}>`; };
   return `<button class="btn ghost small" data-act="canceledit">${ico('refresh', 14)} Back to the list</button>${pageBanner(UI.edit === '' ? 'Add a task' : 'Edit ' + UI.edit, 'Prerequisites are Task IDs separated by commas. The app checks for loops and unknown IDs.')}
   ${groups.map(g => `<details class="card" ${g === 'Identity' ? 'open' : ''}><summary>${esc(g)}</summary><div class="inline-form"><div class="formgrid">${D.config.taskFields.filter(f => f.group === g && f.kind !== 'calc').map(f => field(esc(f.header), inp(f))).join('')}</div></div></details>`).join('')}
+  ${UI.edit !== '' ? linksEditor(UI.edit) : '<p class="hint">Save the task first, then add its links.</p>'}
   <div class="row"><button class="btn" data-act="savetask">Save task</button></div>`;
 }
+function linkRow(l, i) {
+  return `<div class="formgrid" data-linkrow="${i}">${field('Type', `<select data-lk="type">${opts(D.config.linkTypes, l.type)}</select>`)}${field('Name', `<input type="text" data-lk="name" value="${esc(l.name)}">`)}
+    ${field('Who can see it', `<select data-lk="see">${opts(D.config.linkSee, l.see)}</select>`)}${field('Link (https://…)', `<input type="url" data-lk="url" value="${esc(l.url)}">`)}<div><button class="btn ghost small" data-act="rmlink" data-i="${i}">Remove</button></div></div>`;
+}
+function linksEditor(id) {
+  const cur = UI.links && UI.links.id === id ? UI.links.rows : (D.links || []).filter(l => l.task === id).map(l => ({ type: l.type, name: l.name, see: l.see, url: l.url, title: l.title }));
+  UI.links = { id: id, rows: cur };
+  return `<div class="card"><h3>${ico('inbox')} Links</h3><p class="hint">Trainees see links marked Trainee once the task is open. "Team Leader only" links (for example answer keys) never reach a trainee.</p>
+    ${cur.map(linkRow).join('') || '<p class="muted">No links yet.</p>'}<div class="row"><button class="btn ghost small" data-act="addlink">Add a link</button><button class="btn small" data-act="savelinks">Save links</button></div></div>`;
+}
+const readLinkRows = () => $$('[data-linkrow]').map(r => { const o = {}; $$('[data-lk]', r).forEach(e => { o[e.dataset.lk] = e.value; }); return o; });
 Object.assign(ACTIONS, {
+  addlink: () => { UI.links.rows = readLinkRows().concat([{ type: 'Reference / resource', name: '', see: 'Trainee', url: '' }]); render(); },
+  rmlink: b => { UI.links.rows = readLinkRows().filter((x, i) => i !== +b.dataset.i); render(); },
+  savelinks: () => run('saveTaskLinks', [UI.edit, readLinkRows()], 'Links saved', () => { UI.links = null; }),
   newtask: () => { UI.edit = ''; render(); window.scrollTo(0, 0); },
   edittask: b => { UI.edit = b.dataset.t; render(); window.scrollTo(0, 0); },
   canceledit: () => { UI.edit = null; render(); },

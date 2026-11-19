@@ -84,6 +84,16 @@ const tab = (p, t) => p.locator('.tab', { hasText: t }).click();
     assert.ok(/Supervised practice log/.test(await q.locator('main').innerText())); assert.deepStrictEqual(q.errors, []); await q.context().close();
   });
 
+  await step('links: trainee sees the task sheet and references; Team Leader sees the key and can edit links', async () => {
+    const p = await open(browser, ASHA); await tab(p, 'Tasks'); await p.locator('.task', { hasText: 'ADU-01' }).click();
+    const t = await p.locator('main').innerText(); assert.ok(/Open the task sheet/.test(t) && /Tool 01/.test(t) && !/Team Leader key/.test(t));
+    assert.ok((await p.locator('a', { hasText: 'Open the task sheet' }).getAttribute('href')).includes('/CCC/')); await shot(p, '9-trainee-links'); await p.context().close();
+    const q = await open(browser, TLS); await tab(q, 'Task list'); await q.locator('.tablewrap tr', { hasText: 'SAFE-01' }).locator('[data-act=edittask]').click();
+    assert.ok(await q.locator('main').innerText().then(x => /Links/.test(x))); assert.ok(await q.locator('[data-linkrow]').count() === 3);
+    await q.click('[data-act=addlink]'); assert.strictEqual(await q.locator('[data-linkrow]').count(), 4);
+    assert.deepStrictEqual(q.errors, []); await q.context().close();
+  });
+
   await step('Coordinator: confirmations, administration and history', async () => {
     const p = await open(browser, COORD);
     assert.ok(await p.locator('main').innerText().then(t => /Confirmations/.test(t)));

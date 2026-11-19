@@ -12,6 +12,12 @@ const W = makeWorld(); W.setNow('2026-11-10'); W.as(COORD); W.api.setup();
 W.state.workbooks.wb = build(W.api.SHEETS.Tasks);
 const as = (who, fn, ...a) => { W.as(who); return W.call(fn, a); };
 as(COORD, 'importWorkbook', 'wb', false, false);
+const lc = (text, url) => ({ text: text, url: url || '' }), lrow = (id, type, name, see, url) => [lc(id), lc('t'), lc(type), lc(name), lc(see), lc('title', url)];
+W.state.linkGrids = { lk: [['Task ID', 'Task / Activity', 'Link Type', 'Link Name', 'Who Can See It', 'Link'].map(x => lc(x)),
+  lrow('SAFE-01', 'Task sheet', 'SAFE-01 task sheet', 'Trainee', 'https://docs.google.com/document/d/AAA/edit'), lrow('SAFE-01', 'Reference / resource', 'Child Protection Policy', 'Trainee', 'https://docs.google.com/document/d/BBB/edit'),
+  lrow('SAFE-01', 'Team Leader key', 'SAFE-01 Team Leader key', 'Team Leader only', 'https://docs.google.com/document/d/KEY/edit'), lrow('ADU-01', 'Task sheet', 'ADU-01 task sheet', 'Trainee', 'https://docs.google.com/document/d/CCC/edit'),
+  lrow('ADU-01', 'Tool card', 'Tool 01 – Active listening', 'Trainee', 'https://docs.google.com/document/d/DDD/edit')] };
+as(COORD, 'importLinks', 'lk', false);
 as(COORD, 'saveUser', TLS, 'Priya Nair', 'Team Leader – Senior School', true);
 as(COORD, 'saveUser', TLJ, 'Kabir Shah', 'Team Leader – Junior School', true);
 as(COORD, 'saveUser', PRS, 'Meera Desai', 'Principal – Senior School', true);

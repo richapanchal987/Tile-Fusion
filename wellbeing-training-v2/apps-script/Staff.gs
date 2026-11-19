@@ -276,6 +276,25 @@ function setTaskActive(id, active) {
   });
 }
 
+/** Replaces one task's links. A link needs a web address unless it is a note. */
+function saveTaskLinks(taskId, links) {
+  return withLock_(() => {
+    const c = staffCtx_(['tl', 'coord']), t = c.db.rawTasks.find(x => x.id === String(taskId));
+    if (!t) throw new Error('That task was not found.');
+    const mine = (links || []).map(l => {
+      const type = LINK_TYPES.indexOf(l.type) > -1 ? l.type : null, url = str_(l.url, 600), name = str_(l.name, 200);
+      if (!type) throw new Error('Choose a link type.');
+      if (type.indexOf('Note') !== 0 && !/^https?:\/\//i.test(url)) throw new Error('“' + (name || type) + '” needs a link starting with https://');
+      if (!name) throw new Error('Every link needs a name.');
+      return [t.id, type, name, LINK_SEE.indexOf(l.see) > -1 ? l.see : 'Trainee', str_(l.title, 200), type.indexOf('Note') === 0 ? '' : url];
+    });
+    const keep = c.db.links.filter(l => l.task !== t.id).map(l => [l.task, l.type, l.name, l.see, l.title, l.url]);
+    replaceRows_('Links', keep.concat(mine));
+    logChange_(c.me, 'Links', t.id, 'links', c.db.links.filter(l => l.task === t.id).length + ' links', mine.length + ' links');
+    return getBootstrap();
+  });
+}
+
 /* ---------------- administration (Coordinator) ---------------- */
 
 function saveUser(email, name, role, active) {

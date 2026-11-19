@@ -12,7 +12,7 @@ const COVER_HIDDEN_TRAINEE = ['background', 'entryNotes', 'extensionNotes'];
 
 function appConfig_() {
   return { appName: 'Well-being Counsellor Training', orgName: 'Fountainhead School', domain: 'fsksurat.in', readiness: READINESS, areas: AREAS, strands: STRANDS,
-           behaviourItems: BEHAVIOUR_ITEMS, decisions: DECISIONS, obsTypes: OBS_TYPES, sections: SECTIONS, roles: [ROLE.TL_J, ROLE.TL_S, ROLE.COORD, ROLE.PR_J, ROLE.PR_S],
+           behaviourItems: BEHAVIOUR_ITEMS, decisions: DECISIONS, obsTypes: OBS_TYPES, sections: SECTIONS, linkTypes: LINK_TYPES, linkSee: LINK_SEE, roles: [ROLE.TL_J, ROLE.TL_S, ROLE.COORD, ROLE.PR_J, ROLE.PR_S],
            taskFields: TASK_FIELDS.map(f => ({ key: f[0], header: f[1], group: f[2], kind: f[3] })), maxFiles: 5 };
 }
 
@@ -32,7 +32,7 @@ const titleOf_ = (db, id) => { const t = db.tasks.find(x => x.id === id); return
 
 /* ---------------- the trainee's own view ---------------- */
 
-function traineeTaskView_(db, t, st) {
+function traineeTaskView_(db, t, st, section) {
   const v = { id: t.id, title: t.title, strand: t.strand, area: t.area, milestone: t.milestone, stage: t.stage, ageBand: t.ageBand, gate: t.gate,
               keySkill: t.raw.keySkill, bestDoneOn: t.raw.bestDoneOn, effort: t.effort, ratingMethod: t.raw.ratingMethod, passMark: t.raw.passMark,
               evidenceRequired: t.raw.evidenceRequired, assessorRole: t.raw.assessorRole, joint: t.joint, obsType: t.obsType,
@@ -41,6 +41,7 @@ function traineeTaskView_(db, t, st) {
               reasons: st.reasons.map(r => r.kind === 'prereq' ? { kind: 'prereq', tasks: r.ids.map(id => ({ id: id, title: titleOf_(db, id) })) } : r) };
   if (st.status === 'locked' || st.status === 'soon') return v;      // R4-R6: a locked or not-yet-ready task shows no content
   ['what', 'toolkit', 'learn', 'refs', 'refLinks', 'inApp', 'traineeLink', 'evidenceDesc', 'competency', 'anchor', 'rubric', 'rubricLink', 'toolkit'].forEach(k => { v[k] = t.raw[k]; });
+  v.links = linksFor_(db, t.id, false, section);
   v.prereq = t.prereq.map(id => ({ id: id, title: titleOf_(db, id) }));
   return v;
 }
@@ -63,7 +64,7 @@ function traineeBootstrap_(db, me, today, out) {
   out.trainee = { id: tr.id, name: tr.name, email: tr.email, section: tr.section, start: tr.start, tl: tlName_(db, tr.tl), principal: tlName_(db, tr.principal), caseReadiness: tr.caseReadiness,
                   status: tr.status, decision: tr.decision, decisionDate: tr.decisionDate, conditions: tr.conditions, cases: tr.cases, groups: tr.groups };
   out.calc = { cal: calc.cal, cycle: calc.cycle, progress: calc.progress, ready: calc.ready, overdue: calc.overdue, dueSoon: calc.dueSoon, entryDone: calc.entryDone };
-  out.tasks = db.tasks.filter(t => t.active).map(t => traineeTaskView_(db, t, calc.tasks[t.id]));
+  out.tasks = db.tasks.filter(t => t.active).map(t => traineeTaskView_(db, t, calc.tasks[t.id], tr.section));
   out.attempts = mine.map(traineeAttemptView_);
   out.entry = Object.keys(db.entry[tr.email] || {}).map(a => ({ area: a, pathway: db.entry[tr.email][a].pathway }));   // ratings and notes stay with the Team Leader
   out.behaviour = beh.map(b => ({ cycle: b.cycle, self: b.self, released: b.released, items: b.released ? b.items : null, overall: b.released ? behaviourOverall_(b.items) : null,
@@ -91,7 +92,7 @@ function staffTraineeView_(db, tr, me, today, cover) {
 
 function tlBootstrap_(db, me, today, out) {
   out.trainees = db.trainees.map(tr => staffTraineeView_(db, tr, me, today, tr.section !== me.section));
-  out.catalogue = db.rawTasks;
+  out.catalogue = db.rawTasks; out.links = db.links;
   out.milestones = milestoneRows_(db); out.keySkills = db.keySkills; out.toolkit = db.toolkit; out.rubrics = db.rubrics; out.policies = db.policies;
   out.staff = db.users.filter(u => u.active).map(u => ({ email: u.email, name: u.name, role: u.role, section: u.section }));
   out.settings = db.settings;
@@ -142,4 +143,10 @@ const canRate_ = (me, tr) => me.kind === 'tl' && me.section === tr.section;
 function caseLimits_(db, tr, calc) {
   const mine = db.supervision.filter(x => x.trainee === tr.email), m4 = !calc.tasks || !db.tasks.some(t => t.active && t.milestone >= 1 && t.milestone <= 3 && calc.tasks[t.id] && !calc.tasks[t.id].passed);
   return { cases: mine.filter(x => x.type === 'Case').length, groups: mine.filter(x => x.type === 'Group').length, maxCases: m4 ? db.settings.maxCasesM4 : db.settings.maxCases, maxGroups: db.settings.maxGroups, milestone4: m4 };
+}
+
+/** The links for one task. Trainees get only the "Trainee" ones, and the Nucleus form for their own section. */
+function linksFor_(db, taskId, asStaff, section) {
+  const other = section === 'Junior School' ? /senior/i : section === 'Senior School' ? /junior/i : null;
+  return db.links.filter(l => l.task === taskId && (asStaff || l.see === 'Trainee') && !(other && l.type === 'Nucleus form' && (other.test(l.name) || other.test(l.url)))).map(l => ({ type: l.type, name: l.name, title: l.title, url: l.url }));
 }

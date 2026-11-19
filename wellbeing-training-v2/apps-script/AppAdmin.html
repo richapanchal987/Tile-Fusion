@@ -25,6 +25,11 @@ function vAdmin() {
     ${D.imported ? `<label class="row"><input type="checkbox" id="wb-replace"> <span>Replace the existing task list</span></label>` : ''}</div>
     <div class="row"><button class="btn small" data-act="checkimport">Check the workbook</button><button class="btn small" data-act="doimport" ${info && !info.error ? '' : 'disabled'}>Import</button></div>
     ${info && info.counts ? `<div class="note">Found ${info.counts.tasks} tasks (${info.counts.active} active), ${info.counts.keySkills} Key Skills, ${info.counts.toolkit} toolkit cards, ${info.counts.rubrics} rubric rows.${info.warnings.length ? '<br><b>' + info.warnings.length + ' thing' + (info.warnings.length === 1 ? '' : 's') + ' to look at:</b><ul class="warnlist">' + info.warnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '<br>No problems found.'}</div>` : ''}</div>`;
+  const li = UI.linkInfo;
+  const lnk = `<div class="card"><h3>${ico('inbox')} Task links import</h3><p>Brings in the Links tab (task sheets, tool cards, references, Team Leader keys). Do this after the task list import. It replaces the links in the app; after that, edit links on each task.</p>
+    <div class="formgrid">${field('Workbook link or ID', `<input id="lk-id" type="text" ${df('lk')} value="${esc(dv('lk', ''))}" placeholder="https://docs.google.com/spreadsheets/d/…">`, 'The tab must be called Links.')}</div>
+    <div class="row"><button class="btn small" data-act="checklinks">Check the links</button><button class="btn small" data-act="dolinks" ${li && li.counts ? '' : 'disabled'}>Import links</button></div>
+    ${li && li.counts ? `<div class="note">Found ${li.counts.links} links for ${li.counts.tasks} tasks (${li.counts.teamLeaderOnly} for Team Leaders only).${li.warnings.length ? '<br><b>' + li.warnings.length + ' thing' + (li.warnings.length === 1 ? '' : 's') + ' to look at:</b><ul class="warnlist">' + li.warnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '<br>No problems found.'}</div>` : ''}</div>`;
   const users = `<div class="card"><h3>${ico('users')} Staff</h3><div class="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Active</th></tr></thead><tbody>${D.users.map(u => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.role)}</td><td>${u.active ? 'Yes' : 'No'}</td></tr>`).join('')}</tbody></table></div>
     <div class="formgrid">${field('Name', `<input id="us-n" type="text">`)}${field('School email', `<input id="us-e" type="email">`)}${field('Role', `<select id="us-r">${opts(D.config.roles, '')}</select>`)}${field('Active', `<select id="us-a">${opts(['Yes', 'No'], 'Yes')}</select>`)}</div>
     <button class="btn small" data-act="saveuser">Add or update</button><p class="hint">Saving an existing email changes their role or switches them off.</p></div>`;
@@ -34,13 +39,15 @@ function vAdmin() {
   const hol = `<div class="card"><h3>${ico('calendar')} School holidays</h3><p class="hint">One date per line (yyyy-mm-dd). Cycles skip these days and Sundays.</p><textarea id="ho-t" rows="5">${esc(D.holidays.join('\n'))}</textarea><button class="btn small" data-act="saveholidays">Save holidays</button></div>`;
   const keys = ['cycles', 'daysPerCycle', 'passScore', 'supervisedEarliestCycle', 'strandAverageMin', 'keySkillOccasions', 'behaviourCycles', 'dueSoonDays', 'maxUploadMb', 'maxCases', 'maxGroups', 'maxCasesM4'];
   const set = `<details class="card"><summary>Settings</summary><div class="inline-form"><div class="formgrid">${keys.map(k => field(k, `<input id="st-${k}" type="number" step="any" value="${esc(S[k])}">`)).join('')}</div><button class="btn small" data-act="savesettings">Save settings</button></div></details>`;
-  return `${pageBanner('Administration', 'People, deadlines, policies and holidays.')}${imp}${users}${ms}${pol}${hol}${set}`;
+  return `${pageBanner('Administration', 'People, deadlines, policies and holidays.')}${imp}${lnk}${users}${ms}${pol}${hol}${set}`;
 }
 Object.assign(ACTIONS, {
   confirmproc: b => run('confirmProcess', [b.dataset.a, b.dataset.ok === '1', val('pn-' + b.dataset.a)], 'Recorded'),
   reliab: () => run('saveReliability', [val('rl-t'), +val('rl-c'), val('rl-x')], 'Saved'),
   checkimport: async () => { try { busy = true; UI.importInfo = await call('importWorkbook', val('wb-id'), true, val('wb-replace') === true); } catch (e) { UI.importInfo = { error: true, counts: null, warnings: [] }; toast(e.message || String(e), true); } finally { busy = false; render(); } },
   doimport: async () => { try { busy = true; const r = await call('importWorkbook', val('wb-id'), false, val('wb-replace') === true); UI.importInfo = null; setData(r.bootstrap); toast('Imported ' + r.counts.tasks + ' tasks'); } catch (e) { toast(e.message || String(e), true); } finally { busy = false; render(); } },
+  checklinks: async () => { try { busy = true; UI.linkInfo = await call('importLinks', val('lk-id'), true); } catch (e) { UI.linkInfo = null; toast(e.message || String(e), true); } finally { busy = false; render(); } },
+  dolinks: async () => { try { busy = true; const r = await call('importLinks', val('lk-id'), false); UI.linkInfo = null; setData(r.bootstrap); toast('Imported ' + r.counts.links + ' links'); } catch (e) { toast(e.message || String(e), true); } finally { busy = false; render(); } },
   saveuser: () => run('saveUser', [val('us-e'), val('us-n'), val('us-r'), val('us-a') === 'Yes'], 'Saved'),
   savems: () => run('saveMilestones', [[1, 2, 3, 4].map(n => ({ n: n, deadline: val('ms-d' + n), focus: val('ms-f' + n) }))], 'Milestones saved'),
   savepol: b => run('savePolicy', [val('po-n' + b.dataset.i), val('po-l' + b.dataset.i), val('po-u' + b.dataset.i)], 'Saved'),

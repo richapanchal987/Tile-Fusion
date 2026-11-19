@@ -115,6 +115,7 @@ function readDb_() {
     policies: rows_('Policies').map(r => ({ name: String(r[0]), link: String(r[1] || ''), updated: normaliseDate_(r[2]) })),
     holidays: rows_('Holidays').map(r => normaliseDate_(r[0])).filter(Boolean),
     attempts: rows_('Attempts').map(attemptFromRow_), taskDates: {}, acks: {}, behaviour: {},
+    links: rows_('Links').map(r => ({ task: String(r[0]).trim(), type: String(r[1]), name: String(r[2] || ''), see: /team leader/i.test(r[3]) ? 'Team Leader only' : 'Trainee', title: String(r[4] || ''), url: String(r[5] || '').trim() })),
     supervision: rows_('Supervision').map(r => ({ id: String(r[0]), trainee: norm_(r[1]), date: normaliseDate_(r[2]), type: String(r[3]), code: String(r[4] || ''), supervisor: norm_(r[5]), notes: String(r[6] || '') }))
   };
   db.holidaySet = holidaySet_(db.holidays);
