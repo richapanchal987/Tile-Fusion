@@ -149,6 +149,27 @@ t('critical error: the task becomes not yet met with score 1, is flagged for the
   W.as(ADMIN);
 });
 
+t('send back: an assessor can send good work back for rework or reattempt, never the other way; the trainee can then edit and resubmit', () => {
+  W.as(ADMIN); W.call('enrolTrainee', ['Farah', 'farah@fsksurat.in', { mentors: ['mentor@fsksurat.in'] }, '2026-06-01']);
+  const b = boot(), ok = id => Object.fromEntries(b.rubrics.filter(r => r.task === id && r.use === 'score').map(r => [r.order, 4]));
+  me('farah@fsksurat.in', () => { W.call('autosaveTask', ['3.2', { r: { 'r-default': 'Takeaway.' } }]); W.call('saveMyTask', ['3.2', 'submit', 'https://x.example/a']); });
+  me('mentor@fsksurat.in', () => {
+    throwsMsg(() => W.api.assessTask('farah@fsksurat.in', '3.2', { criteria: ok('3.2'), feedback: '', outcome: 'rework' }), /what needs to change/);
+    throwsMsg(() => W.api.assessTask('farah@fsksurat.in', '3.2', { criteria: ok('3.2'), feedback: 'x', outcome: 'complete' }), /Choose a result/);
+    W.call('assessTask', ['farah@fsksurat.in', '3.2', { criteria: ok('3.2'), feedback: 'Strong, but add a second example.', outcome: 'rework' }]);
+  });
+  me('farah@fsksurat.in', () => { const p = tr(boot(), 'farah@fsksurat.in').p['3.2']; assert.strictEqual(p.status, 'rework'); assert.strictEqual(p.score, 4); assert.strictEqual(p.feedback, 'Strong, but add a second example.');
+    W.call('autosaveTask', ['3.2', { r: { 'r-default': 'Takeaway, with a second example.' } }]); W.call('saveMyTask', ['3.2', 'submit', 'https://x.example/b']); assert.strictEqual(tr(boot(), 'farah@fsksurat.in').p['3.2'].status, 'submitted'); });
+  me('mentor@fsksurat.in', () => {
+    W.call('assessTask', ['farah@fsksurat.in', '3.2', { criteria: ok('3.2'), feedback: 'Good.', outcome: 'partial' }]);
+    assert.strictEqual(tr(boot(), 'farah@fsksurat.in').p['3.2'].status, 'partial');
+    const low = Object.fromEntries(b.rubrics.filter(r => r.task === '3.2' && r.use === 'score').map(r => [r.order, 1]));
+    W.call('assessTask', ['farah@fsksurat.in', '3.2', { criteria: low, feedback: 'Redo.', outcome: 'partial' }]);
+    assert.strictEqual(tr(boot(), 'farah@fsksurat.in').p['3.2'].status, 'rework', 'a "developing" choice cannot make a score of 1 better than rework');
+    W.call('assessTask', ['farah@fsksurat.in', '3.2', { criteria: ok('3.2'), feedback: '' }]);
+    assert.strictEqual(tr(boot(), 'farah@fsksurat.in').p['3.2'].status, 'complete', 'from the score, as usual');
+  });
+});
 t('reattempts: one after a miss; after that the trainee is blocked until an admin allows another', () => {
   W.as('asha@fsksurat.in');
   reflect('1.5'); W.call('saveMyTask', ['1.5', 'submit', 'v2', '']);                     // second try (first was Developing)

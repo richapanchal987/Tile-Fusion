@@ -11,9 +11,9 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `Actions.gs` | Script (.gs) | `Actions` | 173 | 9 KB | `}` |
 | `Admin.gs` | Script (.gs) | `Admin` | 234 | 14 KB | `}` |
 | `AppAdmin.html` | HTML | `AppAdmin` | 102 | 20 KB | `</script>` |
-| `AppAssess.html` | HTML | `AppAssess` | 80 | 8 KB | `</script>` |
+| `AppAssess.html` | HTML | `AppAssess` | 85 | 9 KB | `</script>` |
 | `AppCore.html` | HTML | `AppCore` | 128 | 11 KB | `</script>` |
-| `AppEvents.html` | HTML | `AppEvents` | 123 | 10 KB | `</script>` |
+| `AppEvents.html` | HTML | `AppEvents` | 124 | 10 KB | `</script>` |
 | `AppFiles.html` | HTML | `AppFiles` | 88 | 8 KB | `</script>` |
 | `AppTeam.html` | HTML | `AppTeam` | 52 | 8 KB | `</script>` |
 | `AppTrainee.html` | HTML | `AppTrainee` | 212 | 23 KB | `</script>` |
@@ -24,7 +24,7 @@ In the editor, use **+** then **Script** or **HTML** and give the file the name 
 | `DocShape.gs` | Script (.gs) | `DocShape` | 318 | 18 KB | `}` |
 | `DocSync.gs` | Script (.gs) | `DocSync` | 190 | 11 KB | `}` |
 | `Index.html` | HTML | `Index` | 26 | 1 KB | `</html>` |
-| `Logic.gs` | Script (.gs) | `Logic` | 447 | 23 KB | `}` |
+| `Logic.gs` | Script (.gs) | `Logic` | 452 | 24 KB | `}` |
 | `Migrate.gs` | Script (.gs) | `Migrate` | 48 | 3 KB | `}` |
 | `SeedData.gs` | Script (.gs) | `SeedData` | 57 | 21 KB | `};` |
 | `SeedRubrics.gs` | Script (.gs) | `SeedRubrics` | 18 | 6 KB | `const SEED_RUBRIC_PARTS = () => [SEED_RUBRICS_1, SEED_RUBRICS_2, SEED_` |

@@ -30,7 +30,7 @@ document.addEventListener('click',e=>{
       const tr=form.dataset.tr,id=form.dataset.t,s=readAssess(form),criteria={};
       Object.keys(s.vals).forEach(k=>{if(k!=='single')criteria[k]=+s.vals[k]});
       openSet.add(tr+'|'+id);
-      run('assessTask',[tr,id,{criteria:criteria,score:s.vals.single?+s.vals.single:'',exempt:s.exempt,critical:{type:s.critical},feedback:$('[data-f=feedback]',form).value}],'Assessment saved',null,()=>clearDrafts(tr,id));break}
+      run('assessTask',[tr,id,{criteria:criteria,score:s.vals.single?+s.vals.single:'',exempt:s.exempt,critical:{type:s.critical},outcome:s.outcome,feedback:$('[data-f=feedback]',form).value}],'Assessment saved',null,()=>clearDrafts(tr,id));break}
     case'plan':{const tl=$('[data-plan=timeline]',form);openSet.add(form.dataset.tr+'|'+form.dataset.t);run('setTaskPlan',[form.dataset.tr,form.dataset.t,$('[data-plan=due]',form).value,$('[data-plan=ai]',form).value,tl?tl.value:null],'Plan saved');break}
     case'comment':{const f=b.closest('.cmform'),tr=f.dataset.tr,id=f.dataset.t;openSet.add(tr+'|'+id);run('addComment',[tr,id,$('[data-f=comment]',f).value],'Comment added',null,()=>{delete DRAFT[dk(tr,id,'comment')]});break}
     case'grant':openSet.add(ds.tr+'|'+ds.t);run('grantReattempt',[ds.tr,ds.t],'Another reattempt allowed');break;
@@ -92,6 +92,7 @@ document.addEventListener('change',async e=>{
     if(ds.f==='crit')DRAFT[dk(tr,id,'c'+ds.o)]=el.value;
     else if(ds.f==='score')DRAFT[dk(tr,id,'score')]=el.value;
     else if(ds.f==='exempt')DRAFT[dk(tr,id,'exempt')]=el.checked?'1':'0';
+    else if(ds.f==='outcome')DRAFT[dk(tr,id,'outcome')]=el.value;
     else if(ds.f==='critical'){DRAFT[dk(tr,id,'critical')]=el.value;openSet.add(tr+'|'+id);render();return}
     refreshSummary(form);return;
   }

@@ -390,7 +390,12 @@ function validateAssessment_(task, rows, input, settings) {
     score = 1;                                       // a critical error is "not yet met", whatever the criteria say
   }
   const meets = score >= 3 && score >= settings.passScore;
-  const status = critical ? 'rework' : meets ? 'complete' : score >= 2 ? 'partial' : 'rework';
+  let status = critical ? 'rework' : meets ? 'complete' : score >= 2 ? 'partial' : 'rework';
+  // The assessor may send work back whatever it scored: 'partial' (reattempt after feedback) or 'rework' (redo and resubmit). Never the other way: only the score can make a task Complete.
+  const want = String(input.outcome || '');
+  if (want !== '' && want !== 'partial' && want !== 'rework') throw new Error('Choose a result: from the score, developing or rework.');
+  if (want === 'rework') status = 'rework';
+  else if (want === 'partial' && status === 'complete') status = 'partial';
   if ((status === 'partial' || status === 'rework') && !feedback) throw new Error('Tell the trainee what needs to change.');
   return { status: status, score: score, feedback: feedback, criteria: criteria, critical: critical };
 }

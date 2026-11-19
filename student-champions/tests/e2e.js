@@ -291,6 +291,28 @@ const toast = (p, text, err) => p.waitForSelector(`.toast${err ? '.err' : ''}.sh
     await calm.close();
   });
 
+  await step('mentor/TL: send good work back with the Result choice; the trainee sees why and edits and resubmits', async () => {
+    W.as('devi@fsksurat.in'); W.call('autosaveTask', ['3.2', { r: { 'r-default': 'One takeaway.' } }]); W.call('saveMyTask', ['3.2', 'submit', 'https://x.example/book']);
+    const p = await open(browser, 'tl@fsksurat.in');
+    const rv = p.locator('.rv', { hasText: 'Find a Book' });
+    await rv.locator('label[for$="-4"]').evaluateAll(ls => ls.forEach(l => l.click()));
+    assert.ok((await rv.locator('[data-result]').innerText()).includes('Result: Complete'));
+    await rv.locator('select[data-f=outcome]').selectOption('rework');
+    assert.ok((await p.locator('.rv', { hasText: 'Find a Book' }).locator('[data-result]').innerText()).includes('Rework, the trainee redoes and resubmits (as you chose)'));
+    await p.locator('.rv', { hasText: 'Find a Book' }).locator('[data-act=assess]').click(); await toast(p, 'Tell the trainee what needs to change', true);
+    await p.locator('.rv', { hasText: 'Find a Book' }).locator('[data-f=feedback]').fill('Good choice of book. Say how you would use it with a student.');
+    await p.locator('.rv', { hasText: 'Find a Book' }).locator('[data-act=assess]').click(); await toast(p, 'Assessment saved');
+    await p.screenshot({ path: path.join(shots, '2c-send-back.png'), fullPage: false }); await p.context().close();
+    const t = await open(browser, 'devi@fsksurat.in'); await t.locator('.node[data-c="5"]').click();
+    const c = await openCard(t, 'Find a Book');
+    const txt = await c.innerText();
+    assert.ok(txt.includes('Not yet met') && txt.includes('Say how you would use it with a student') && txt.includes('reattempt this task once more'));
+    await c.locator('textarea[data-w=r]').first().fill('One takeaway, and how I would use the book with a student.');
+    await t.waitForSelector('.savestate:has-text("Saved at")');
+    await card(t, 'Find a Book').locator('[data-act=submit]').click(); await toast(t, 'Submitted for review');
+    assert.deepStrictEqual(t.errors, []); await t.context().close();
+  });
+
   await step('admin: team table with people and status, enrol with mentor/TL/certifier, make someone a Certifying Mentor', async () => {
     const p = await open(browser, ADMIN);
     await p.locator('.tab', { hasText: 'Team' }).click();
