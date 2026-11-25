@@ -120,6 +120,11 @@ t('module editing: topic, task add/edit/archive, resources, settings', () => {
   assert.strictEqual(b.trainees[0].stats.gatesTotal, 38, 'archived task leaves the gate list');
   b = W.call('saveResources', [5, '5.12', [{ label: 'Course', url: 'https://x.example/c', note: 'Rs 7,000' }]]);
   assert.strictEqual(b.res.filter(r => r.task === '5.12').length, 1);
+  b = W.call('saveResources', [5, '5.12', [{ label: 'Course', url: 'https://x.example/c', note: '' }, { label: 'Answer key', url: 'https://x.example/key', staffOnly: true }]]);
+  assert.strictEqual(b.res.filter(r => r.task === '5.12').length, 2, 'staff see the Team Leader-only resource');
+  W.as('asha@fsksurat.in'); const tb = W.call('getBootstrap', []);
+  assert.ok(!JSON.stringify(tb.res).includes('x.example/key') && tb.res.some(r => r.label === 'Course'), 'a trainee never receives a Team Leaders only resource');
+  W.as('richa.panchal@fsksurat.in');
   throwsMsg(() => W.api.saveResources(5, '', [{ label: 'x', url: 'javascript:alert(1)' }]), /http/);
   b = W.call('saveTopic', [{ id: 9, name: 'Professional Learning & Applied Resources', w: 3, note: 'edited' }]);
   assert.strictEqual(b.topics.find(x => x.id === 9).note, 'edited');
@@ -161,4 +166,39 @@ t('typed text starting with = is stored as text, not a formula (cell format is p
   W.as('asha@fsksurat.in'); W.call('saveMyTask', ['2.1', 'save', '=HYPERLINK("http://evil")', '+cmd']);
   const row = W.sheets.Progress.cells.find(r => r[1] === '2.1'); assert.strictEqual(row[3], '=HYPERLINK("http://evil")');
 });
+
+{
+  const c = (text, url, chip) => ({ text: text, url: url || '', chip: !!chip });
+  const lrow = (id, type, name, who, url) => [c(id), c('t'), c('x'), c('p'), c('1'), c('Practice'), c('d'), c(type), c(name), c(who), c('title', url, true)];
+  const lhead = ['Task ID', 'Task / Activity', 'Training Topic', 'Phase', 'Cycle', 'Task Type', 'Task Description', 'Link Type', 'Link Name', 'Who Can See It', 'Link'].map(x => c(x));
+  W.state.cellGrids = {
+    '1iVexQk5tSoIJUfGkfsWHxm3YdZ16T5X7THV_SN2HuKo': [lhead,
+      lrow('SAFE-01', 'Task sheet', 'SAFE-01 Role map – trainee task sheet', 'Trainee', 'https://docs.google.com/document/d/AAA/edit'),
+      lrow('SAFE-01', 'Team Leader key', 'SAFE-01 – Team Leader key', 'Team Leader only', 'https://docs.google.com/document/d/KEY/edit'),
+      lrow('STU-12', 'Tool card', 'Tool 02 – OARS', 'Trainee', 'https://docs.google.com/document/d/OARS/edit'),
+      lrow('NEW-1', 'Task sheet', 'Only in the workbook', 'Trainee', 'https://docs.google.com/document/d/NEW/edit'),
+      lrow('SAFE-02', 'Tool card', 'No link yet', 'Trainee', '')],
+    '1FhQ9YXTp96HwZGdZIgz38cVbD20R5ZQ6xwPsQr_2BWY': [['Task ID', 'Old Task (Team Leader only)'].map(x => c(x)),
+      [c('SAFE-01'), c('1.1 Role Mapping')], [c('SAFE-02'), c('')], [c('STU-12'), c('5.1–5.2 Observe; 5.10 Role Play')], [c('NEW-1'), c('')]]
+  };
+  t('task links: old-task mapping, ranges, Team Leaders only, skips, and safe to run twice', () => {
+    assert.deepStrictEqual(Array.from(W.api.oldTaskIds_('5.1–5.3 Observe; 5.15 Feedback')), ['5.1', '5.2', '5.3', '5.15']);
+    W.as('richa.panchal@fsksurat.in');
+    const dry = W.call('importTaskLinks', []);
+    assert.strictEqual(dry.wouldAdd, 5); assert.strictEqual(dry.written, false);
+    assert.ok(dry.warnings.some(w => /NEW-1 is new in the workbook/.test(w)) && dry.warnings.some(w => /has no link in it/.test(w)));
+    assert.strictEqual(W.call('getBootstrap', []).res.filter(r => /AAA|KEY|OARS/.test(r.url)).length, 0, 'a dry run writes nothing');
+    const done = W.call('importTaskLinks', [false]); assert.strictEqual(done.written, true);
+    let b = W.call('getBootstrap', []);
+    assert.ok(b.res.some(r => r.task === '1.1' && r.label === 'Role map – trainee task sheet' && r.note === 'Task sheet'));
+    assert.ok(b.res.some(r => r.task === '1.1' && r.staffOnly), 'staff see the Team Leader key');
+    assert.deepStrictEqual(b.res.filter(r => /OARS/.test(r.url)).map(r => r.task).sort(), ['5.1', '5.10', '5.2']);
+    W.as('asha@fsksurat.in'); b = W.call('getBootstrap', []);
+    assert.ok(b.res.some(r => r.task === '1.1') && !JSON.stringify(b.res).includes('/KEY/'), 'a trainee never receives the key');
+    W.as('richa.panchal@fsksurat.in');
+    assert.strictEqual(W.call('importTaskLinks', [false]).wouldAdd, 0, 'running again adds nothing');
+    W.as('asha@fsksurat.in'); assert.throws(() => W.api.importTaskLinks(false), /admin/i);
+  });
+}
+
 console.log('\n' + n + ' server tests passed');

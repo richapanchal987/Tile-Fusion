@@ -60,13 +60,14 @@ function makeWorld() {
       newBlob: blob
     },
     DriveApp: { createFolder: n => folder(n), getFolderById: i => { if (!state.folders[i]) throw new Error('no folder'); return state.folders[i]; }, getFileById: i => { if (!state.files[i]) throw new Error('no file'); return state.files[i]; } },
+    Sheets: { Spreadsheets: { get: (id) => { const g = state.cellGrids && state.cellGrids[id]; if (!g) throw new Error('No access'); return { sheets: [{ data: [{ rowData: g.map(r => ({ values: r.map(c => { const v = { formattedValue: c.text }; if (c.url) { if (c.chip) v.chipRuns = [{ chip: { richLinkProperties: { uri: c.url } } }]; else v.hyperlink = c.url; } return v; }) })) }] }] }; } } },
     HtmlService: {}
   };
   const ctx = vm.createContext(sandbox);
   const dir = path.join(__dirname, '..', 'apps-script');
-  const src = ['Logic.gs', 'SeedData.gs', 'Code.gs'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
+  const src = ['Logic.gs', 'SeedData.gs', 'Code.gs', 'LinksImport.gs'].map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   const names = ['setup', 'getBootstrap', 'getActivityLog', 'saveMyTask', 'uploadEvidence', 'removeEvidence', 'getEvidenceFile', 'assessTask', 'confirmReadiness',
-    'enrolTrainee', 'updateTrainee', 'saveStaff', 'removeStaff', 'saveTopic', 'saveTask', 'setTaskActive', 'saveResources', 'saveSettings'];
+    'enrolTrainee', 'updateTrainee', 'saveStaff', 'removeStaff', 'saveTopic', 'saveTask', 'setTaskActive', 'saveResources', 'saveSettings', 'importTaskLinks', 'oldTaskIds_'];
   const api = vm.runInContext(src + `;({${names.join(',')}, SHEETS})`, ctx);
   const plain = x => JSON.parse(JSON.stringify(x === undefined ? null : x));
   return { state, sheets, api, as(email) { state.user = email; },

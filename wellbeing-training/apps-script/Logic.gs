@@ -217,7 +217,7 @@ function buildBootstrap_(db, me, todayIso, appConfig) {
       standard: t.standard, weight: t.weight, gate: t.gate, mandatory: t.mandatory, active: t.active, order: t.order,
       w: Math.round((eff[t.id] || 0) * 10) / 10
     })),
-    res: db.resources,
+    res: db.resources.filter(r => staff || !r.staffOnly),
     trainees: trainees
   };
   if (me.role === 'Admin') out.staff = db.staff;

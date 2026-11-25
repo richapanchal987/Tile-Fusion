@@ -115,3 +115,10 @@ NODE_PATH=$(npm root -g) node tests/e2e.js   # the real pages in headless Chromi
 ```
 
 These run the same code that is deployed, but against stand-ins for Google's services. A first deployment in your own Google account is still the real test: please click through one trainee and one assessor journey.
+
+## Task links (added later)
+
+The links in the training workbook's `Links` tab are brought in with `importTaskLinks()` (file `LinksImport.gs`, run it from the Apps Script editor).
+It uses the workbook's "Old Task" column to attach each link to the original task (1.1, 5.12 ...), skips links for tasks that exist only in the workbook, and never adds the same link twice.
+`importTaskLinks()` only reports what it would add; `importTaskLinks(false)` writes to the `Resources` tab.
+The `Resources` tab has a sixth column, "Visible to" (`Everyone` or `Team Leaders only`); answer keys are `Team Leaders only` and are never sent to trainees.

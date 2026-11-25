@@ -24,7 +24,7 @@ const SHEETS = {
   Topics: ['Topic ID', 'Topic', 'Weight %', 'Internal notes'],
   Tasks: ['Task ID', 'Topic ID', 'Cycle', 'Task', 'Type', 'What the trainee will do', 'Evidence / Output',
           'Competency standard', 'Weight within topic', 'Critical gate', 'Mandatory before independent', 'Active', 'Order'],
-  Resources: ['Topic ID', 'Task ID', 'Resource', 'Link', 'Note'],
+  Resources: ['Topic ID', 'Task ID', 'Resource', 'Link', 'Note', 'Visible to'],
   Staff: ['Email', 'Name', 'Role'],
   Trainees: ['Email', 'Name', 'Assessors', 'Start date', 'Pathway', 'Active', 'Readiness', 'Readiness set by',
              'Readiness date', 'Readiness note'],
@@ -74,7 +74,7 @@ function setup() {
   if (empty('Phases')) put('Phases', SEED.phases.map(p => [p.name, p.from, p.to]));
   if (empty('Topics')) put('Topics', SEED.topics.map(t => [t.id, t.name, t.weight, t.note]));
   if (empty('Tasks')) put('Tasks', SEED.tasks.map(taskToRow_));
-  if (empty('Resources')) put('Resources', SEED.resources.map(r => [r.topic, r.task, r.label, r.url, r.note]));
+  if (empty('Resources')) put('Resources', SEED.resources.map(r => [r.topic, r.task, r.label, r.url, r.note, 'Everyone']));
 
   const s1 = ss.getSheetByName('Sheet1');
   if (s1 && s1.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(s1);
@@ -164,7 +164,7 @@ function readDb_() {
       what: String(r[5] || ''), evidence: String(r[6] || ''), standard: String(r[7] || ''), weight: num_(r[8]),
       gate: yes_(r[9]), mandatory: yes_(r[10]), active: String(r[11]).trim() === '' ? true : yes_(r[11]), order: num_(r[12], 9999)
     })),
-    resources: rows_('Resources').map(r => ({ topic: num_(r[0]), task: String(r[1] || '').trim(), label: String(r[2] || ''), url: String(r[3] || ''), note: String(r[4] || '') })),
+    resources: rows_('Resources').map(r => ({ topic: num_(r[0]), task: String(r[1] || '').trim(), label: String(r[2] || ''), url: String(r[3] || ''), note: String(r[4] || ''), staffOnly: /team leader|staff/i.test(String(r[5] || '')) })),
     staff: readStaff_(),
     trainees: rows_('Trainees').map(r => ({
       email: norm_(r[0]), name: String(r[1] || r[0]),
@@ -510,11 +510,11 @@ function saveResources(topicId, taskId, list) {
   return withLock_(() => {
     const ctx = context_(); requireAdmin_(ctx.me);
     topicId = Number(topicId); taskId = String(taskId || '').trim();
-    const clean = (list || []).map(r => ({ topic: topicId, task: taskId, label: str_(r.label, 200), url: str_(r.url, 1000), note: str_(r.note, 500) }))
+    const clean = (list || []).map(r => ({ topic: topicId, task: taskId, label: str_(r.label, 200), url: str_(r.url, 1000), note: str_(r.note, 500), staffOnly: !!r.staffOnly }))
       .filter(r => r.label);
     clean.forEach(r => { if (r.url && !/^https?:\/\//i.test(r.url)) throw new Error('Links must start with http:// or https:// (' + r.label + ').'); });
     const keep = ctx.db.resources.filter(r => !(r.topic === topicId && r.task === taskId));
-    replaceRows_('Resources', keep.concat(clean).sort((a, b) => a.topic - b.topic).map(r => [r.topic, r.task, r.label, r.url, r.note]));
+    replaceRows_('Resources', keep.concat(clean).sort((a, b) => a.topic - b.topic).map(r => [r.topic, r.task, r.label, r.url, r.note, r.staffOnly ? 'Team Leaders only' : 'Everyone']));
     logAction_(ctx.me, 'Saved resources', '', taskId, 'Topic ' + topicId + ', ' + clean.length + ' items');
     return getBootstrap();
   });

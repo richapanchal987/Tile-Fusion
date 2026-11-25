@@ -225,7 +225,7 @@ function taskCard(tr,t,mine){
       <div class="kv"><h4>What you'll do</h4><p>${esc(t.what)}</p></div>
       <div class="kv"><h4>What good looks like</h4><p>${esc(t.standard)}${t.gate?`\nCritical gate: needs Complete with a score of ${D.config.passScore} or more.`:''}</p></div>
       <div class="kv"><h4>Evidence to submit</h4><p>${esc(t.evidence)}</p></div>
-      <div class="kv"><h4>Resources</h4><ul class="res">${res.map(r=>`<li>${isUrl(r.url)?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.label)}</a>`:`<span>${esc(r.label)}</span><span class="nolink">link not added yet</span>`}${r.note?`<span class="hint">${esc(r.note)}</span>`:''}</li>`).join('')||'<li class="nolink">No resources yet</li>'}</ul></div>
+      <div class="kv"><h4>Resources</h4><ul class="res">${res.map(r=>`<li>${isUrl(r.url)?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.label)}</a>`:`<span>${esc(r.label)}</span><span class="nolink">link not added yet</span>`}${r.staffOnly?'<span class="hint">Team Leaders only</span>':''}${r.note?`<span class="hint">${esc(r.note)}</span>`:''}</li>`).join('')||'<li class="nolink">No resources yet</li>'}</ul></div>
       ${staff?`<p class="hint">Counts ${t.w}% toward training completion.</p>`:''}
       ${block}
     </div></details>`;
@@ -323,7 +323,7 @@ function resEditor(topic,task){
   const k=topic+'|'+task;
   if(!RES[k])RES[k]=D.res.filter(r=>r.topic===topic&&r.task===task).map(r=>Object.assign({},r));
   return`<div class="kv"><h4>${task?'Resources for this task':'Resources for the whole topic'}</h4>
-    ${RES[k].map((r,i)=>`<div class="resrow"><input type="text" aria-label="Resource name" placeholder="Name" value="${esc(r.label)}" data-rs="${k}" data-i="${i}" data-rf="label"><input type="text" aria-label="Resource link" placeholder="Link (https://...)" value="${esc(r.url)}" data-rs="${k}" data-i="${i}" data-rf="url"><input type="text" aria-label="Note" placeholder="Note (optional)" value="${esc(r.note)}" data-rs="${k}" data-i="${i}" data-rf="note"><button class="btn ghost small" data-act="res-del" data-scope="${k}" data-i="${i}">Remove</button></div>`).join('')}
+    ${RES[k].map((r,i)=>`<div class="resrow"><input type="text" aria-label="Resource name" placeholder="Name" value="${esc(r.label)}" data-rs="${k}" data-i="${i}" data-rf="label"><input type="text" aria-label="Resource link" placeholder="Link (https://...)" value="${esc(r.url)}" data-rs="${k}" data-i="${i}" data-rf="url"><input type="text" aria-label="Note" placeholder="Note (optional)" value="${esc(r.note)}" data-rs="${k}" data-i="${i}" data-rf="note"><select aria-label="Who can see it" data-rs="${k}" data-i="${i}" data-rf="staffOnly"><option value="" ${r.staffOnly?'':'selected'}>Everyone</option><option value="1" ${r.staffOnly?'selected':''}>Team Leaders only</option></select><button class="btn ghost small" data-act="res-del" data-scope="${k}" data-i="${i}">Remove</button></div>`).join('')}
     <div class="row"><button class="btn ghost small" data-act="res-add" data-scope="${k}">Add resource</button><button class="btn small" data-act="res-save" data-scope="${k}" data-topic="${topic}" data-task="${esc(task)}">Save resources</button></div></div>`;
 }
 
@@ -522,7 +522,7 @@ document.addEventListener('click',e=>{
     case'task-save':{const isNew=UI.editTask.startsWith('new:');run('saveTask',[UI.tf,isNew],'Task saved',null,()=>{UI.editTask=null;UI.tf=null});break}
     case'task-archive':run('setTaskActive',[ds.id,false],'Task archived');break;
     case'task-restore':run('setTaskActive',[ds.id,true],'Task restored');break;
-    case'res-add':RES[ds.scope].push({label:'',url:'',note:''});render();break;
+    case'res-add':RES[ds.scope].push({label:'',url:'',note:'',staffOnly:false});render();break;
     case'res-del':RES[ds.scope].splice(+ds.i,1);render();break;
     case'res-save':run('saveResources',[+ds.topic,ds.task,RES[ds.scope]],'Resources saved',null,()=>{delete RES[ds.scope]});break;
   }
@@ -535,7 +535,7 @@ document.addEventListener('input',e=>{
   if(ds.ph!=null)PH[+ds.ph][ds.pf]=el.value;
   if(ds.tpf)UI.tpf[ds.tpf]=el.value;
   if(ds.tf)UI.tf[ds.tf]=el.type==='checkbox'?el.checked:(['topic','cycle'].includes(ds.tf)?+el.value:el.value);
-  if(ds.rs)RES[ds.rs][+ds.i][ds.rf]=el.value;
+  if(ds.rs)RES[ds.rs][+ds.i][ds.rf]=ds.rf==='staffOnly'?el.value==='1':el.value;
 });
 
 document.addEventListener('change',async e=>{
